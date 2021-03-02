@@ -1,0 +1,58 @@
+# Ignore all
+*
+
+# Unignore all dirs
+!*/
+
+# Unignore .txt, .c, .h
+!*.txt
+!*.TXT
+!*.c
+!*.h
+
+# Unignore markup
+!*.ad
+!*.adoc
+!*.md
+!*.MD
+
+# Now ignore build and other temp. or IDE directories
+# which may contain these files
+
+# CLion project settings
+.idea/
+
+# VS
+.vs/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+*-build/
+cmake-build-debug/
+build/
+_build/
+
+# Qt-es
+object_script.*.Release
+object_script.*.Debug
+*.pro.user.*
+*.qbs.user.*
+*build-*
+
+# Qt unit tests
+target_wrapper.*
+
+# QtCreator Qml
+*.qmlproject.user.*
+
+# QtCreator CMake
+CMakeLists.txt.user*
+
+# QtCreator local machine specific files for imported projects
+*creator.user*
+
+# Unignore .gitignore and .clang-format
+!.gitignore
+!.clang-format
+
