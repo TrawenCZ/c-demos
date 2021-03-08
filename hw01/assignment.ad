@@ -1,0 +1,201 @@
+---
+title: "HW01: Base58"
+layout: "homework"
+list-of-files: ["base58.c"]
+publish: 2021-03-07 00:00
+deadline-early: 2021-03-18 24:00
+deadline-final: 2021-03-21 24:00
+authors:
+  - Petr Pilař: ~
+  - Tobiáš Kamenický: ~
+editors:
+  - xskarou1
+---
+
+== Představení úkolu
+
+link:https://en.wikipedia.org/wiki/Binary-to-text_encoding#Base58[Base58] je
+kódování, které bylo vytvořeno primárně za účelem konverze binárních dat na
+data textová. Tato konverze umožňuje jejich přenos přes výhradně textové
+protokoly. Jelikož některé protokoly umožňují používání pouze vybraných
+tisknutelných znaků, je rozsah výstupních symbolů kódování Base58 omezen. V
+některých fontech vypadají různé znaky stejně (`O` a `0`, `I` a `l`...) a aby
+nedocházelo ke zmatkům, používá Base58 pouze znaky, mezi kterými lze vždy
+jednoznačně rozlišit.
+
+== Zadání
+
+Vaším úkolem bude vytvořit program schopný kódovat a dekódovat data ze
+standardního vstupu pomocí algoritmu Base58. Pro účely této domácí úlohy nicméně
+budeme uvažovat zjednodušenou verzi bez kontrolního součtu a verze.
+
+Base58 každým 4 bajtům přiřadí bajtů 6. Postup je následující:
+
+. Vstupní 4 bajty převedeme na jedno číslo `N` tak, že ony 4 bajty „poskládáme
+  za sebe” ve stejném pořadí, v jakém jsme je přečetli.
+. Z tohoto čísla `N` nejprve vezmeme zbytek podělení 58, čímž získáme náš
+  první mezivýpočet.
+. Poté se `N` celočíselně vydělí 58.
+. _Tento proces se celkem opakuje šestkrát, čímž získáme 6 čísel._
+. Každé takto získané číslo zobrazíme do znakové sady Base58, což jsou znaky
+  `1`-`9`, `A`-`Z` a `a`-`z` bez nejednoznačných znaků `0`, `O`, `I` a `l`
++
+(tedy těchto 58 znaků: `1-9A-HJ-NP-Za-km-z`).
+
+Tím jsme získali šest výsledných znaků. První znak výstupu je přitom **poslední**
+takto získaný znak.
+
+TIP: Zamyslete se nad tím, které numerické typy mají dostatečný rozsah --
+zaručují vám, že se do nich každé vstupní číslo `N` vejde.
+
+=== Příklad
+
+Vstup: "Lore"
+
+[options="header",role="table table-sm table-bordered table-hover"]
+|=========================================================
+| Vstupní bajt | Dekadické vyjádření | Binární vyjádření
+| L | 76  | 01001100
+| o | 111 | 01101111
+| r | 114 | 01110010
+| e | 101 | 01100101
+|=========================================================
+
+`N` je tedy v binární soustavě vyjádřeno jako `01001100011011110111001001100101`,
+v dekadické je to `1282372197`.
+
+[cols="<2,>3",options="header",role="table table-sm table-bordered table-hover"]
+|===========================================
+| Zbytek po dělení 58 | Výsledek dělení 58
+| 27 | 22109865
+| 33 | 381204
+| 28 | 6572
+| 18 | 113
+| 55 | 1
+| 1 | 0
+|===========================================
+
+Výsledkem tedy bude 6 bajtů vyjádřených znaky ASCII, jejichž pořadí ve znakové
+sadě Base58 je 1, 55, 18, 28, 33, 27, což jsou znaky `'2'`, `'x'`, `'K'`, `'V'`,
+`'a'`, `'U'`.
+
+Výstup: ``"2xKVaU"``
+
+== Požadavky
+
+Váš program musí jít přeložit a fungovat dle
+link:https://www.fi.muni.cz/pb071/info/homeworks.html#jak-kontr-kompiluje[požadavků
+pro zkompilování na aise].
+
+=== Kódování
+
+Funkce `bool encode(void)` *zakóduje* data načtená ze standardního vstupu
+pomocí Base58 a vypíše je na standardní výstup.
+
+* Ze standardního vstupu přestaňte číst, jakmile funkce pro čtení signalizuje
+  konec vstupu hodnotou `EOF` (_End of File_).
+* Pokud vstup skončí, aniž by z něj program načetl kompletní čtveřici bajtů,
+  doplňte ji zprava znaky `'\0'`.
+* Dojde-li k chybě, funkce vrátí `false`, jinak vrátí `true`.
+* Funkce musí na konec výstupu zapsat znak nového řádku, `'\n'`.
+
+NOTE: Funkce `encode` vrací hodnotu typu `bool` především kvůli konzistenci s
+funkcí `decode` (viz níže). Jestliže nebudete pracovat s žádnými zdroji (ke
+správnému vyřešení úlohy žádné zdroje nepotřebujete), `encode` by měla vždy
+vracet `true`.
+
+=== Dekódování
+
+Funkce `bool decode(void)` *dekóduje* data načtená ze standardního vstupu,
+která byla zakódována pomocí Base58, a vypíše je na standardní výstup.
+
+* Ze standardního vstupu přestaňte číst, jakmile funkce pro čtení signalizuje
+  konec vstupu hodnotou `EOF` (_End of File_).
+* Při dekódování neodstraňujte z konce výstupu znaky `'\0'`. Nemůžete vědět,
+  jestli původní vstup končil znaky `'\0'`, jestli byly doplněny při zakódování,
+  nebo jestli je vstupem např. obrázek ve formátu PNG, kde se nulové bajt běžně
+  vyskytují.
+* Funkce musí při čtení ignorovat bílé znaky (např. `'\n'`).
+* Pokud načtený vstup nemohl vzniknout použitím Base58 (jeho délka není
+  dělitelná šesti nebo obsahuje bajty, které Base58 nevyužívá a které nejsou
+  bílé), funkce vrátí `false`, jinak vrátí `true`.
+
+NOTE: Kostra řešení je navržena tak, že funkce `encode` je volána z funkce
+`main`, jestliže je program spuštěn bez přepínačů, nebo právě s přepínačem `-e`.
+Podobně, `decode` je z `main` volána, pokud je program spuštěn právě s
+přepínačem `-d`.
+
+== Příklady
+
+=== Kódování
+
+[options="header",role="table table-sm table-bordered table-hover"]
+|===========================================
+| Vstup | Výstup
+| `Man` | `2yimnP`
+| `Donec nec euismod orci` | `2kTb243XxfiC3Xxf2k3hLUJJ3ZSf5B3YP3Tu`
+| `Lorem ipsum dolor sit amet, consectetur adipiscing elit` | ``2xKVaU3nnY9m3xB24F3ZuBtS3vCVKW3yASWp3bQmgb3YRCkz3bK9zk3yf1if3VPXWw3hLTY43pgH4p3mj5q1``
+|===========================================
+
+=== Dekódování
+
+[options="header",role="table table-sm table-bordered table-hover"]
+|===========================================
+| Vstup | Výstup
+| `2fzwXh` | `Amet`
+| `34GRrc3x5eTD1q52WD3rE53E3wgTTe3eLp2N3x6zH53sdgTD3bNrHz3x9gm2` | `Praesent lobortis dignissim pellentesque`
+|===========================================
+
+== Bonusové rozšíření (1 bod)
+
+Až 1 bonusový bod obdrží ti, kteří správně použijí numerické typy s pevnou
+velikostí. Tyto typy se nachází v hlavičce `stdint.h`. Mezi typy s pevnou
+velikostí patří například `uint8_t` (8-bitové číslo bez znaménka) nebo `int32_t`
+(32-bitové číslo se znaménkem).
+
+== Poznámky
+
+* Pro čtení doporučujeme použít bezparametrickou funkci
+  https://en.cppreference.com/w/c/io/getchar[`getchar`]. Tato
+  funkce vrací buď jeden znak ze standardního vstupu, nebo `EOF`, pokud už žádné
+  další znaky není možné přečíst.
+  Návratovým typem této funkce je `int`, aby bylo možné rozlišit `EOF` od
+  vstupních bajtů.
+
+* Zda je znak bílý, lze ověřit pomocí funkce
+  link:https://en.cppreference.com/w/c/string/byte/isspace[`isspace`].
+
+* Datový typ `bool` najdete v hlavičkovém souboru `stdbool.h`. Ač je možné, že
+  vám bude úloha na vašem počítači fungovat i bez něj, riskujete, že vám selže
+  kompilace na aise.
+
+* `decode` je zobrazení z Base58 do rozšířeného ASCII (rozsah 0-255). Bílé znaky
+  nejsou součástí znakové sady Base58, pročež bychom mohli jejich přítomnost
+  během dekódování považovat za chybu. Bílé znaky se ale hodí při formátování
+  textu, a tak jejich přítomnost povolujeme a pouze je při dekódování
+  přeskakujeme. Naproti tomu `encode` je zobrazení z rozšířeného ASCII do Base58
+  a bílé znaky patří do rozšířeného ASCII.
+
+* Pro testování vaší implementace můžete na Linuxu použít např. příkaz
++
+[source,bash]
+----
+echo -en 'Donec nec euismod orci' | ./base58
+----
++
+Na Windows doporučujeme použít
+link:https://www.fi.muni.cz/pb071/man/#wsl[Windows Subsystem for Linux]
+nebo link:https://www.fi.muni.cz/pb071/man/#git-for-windows-verzovac%C3%AD-syst%C3%A9m[Git Bash].
+
+* Kontrola bude probíhat porovnáváním výstupů. Dejte si tedy pozor, ať nevypisujete nic navíc.
+** V případě chybných vstupů není kontrolován standardní výstup programu, ale
+   pouze, zda funkce `encode` (resp. `decode`) vrací false.
+** Na standardní chybový výstup nic nevypisujte. O to se postará funkce `main` z
+   kostry. Tuto funkci **neupravujte**.
+
+* Své vypracování můžete porovnat se vzorovým, které naleznete na aise. Umístění
+  vzoru je následující:
++
+----
+/home/kontr/pb071/hw01/base58
+----
