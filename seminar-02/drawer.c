@@ -28,7 +28,7 @@ void draw_rectangle(int a, int b, char fill) {
             putchar(fill);
         }
         putchar('\n');
-        length--;
+        a--;
     }
     putchar('\n');
 }
@@ -43,7 +43,49 @@ int main(void)
         scanf("%*s");
     }
     switch (x) {
-        
+        case 1:
+            printf("Vložte rozměr čáry: ");
+            int a = 0;
+            while ((scanf("%d", &a) != 1) || a < 0) {
+                printf("Read failed. Try again.\nVložte číslo znovu: ");
+                scanf("%*s");
+            }
+            draw_line(a);
+            break;
+        case 2:
+            printf("Vložte rozměr čtverce: ");
+            int size = 0;
+            while ((scanf("%d", &size) != 1) || size < 0) {
+                printf("Read failed. Try again.\nVložte číslo znovu: ");
+                scanf("%*s");
+            }
+            draw_square(size);
+            break;
+        case 3:
+            printf("Vložte výšku obdelníku:\n");
+            int height = 0;
+            while ((scanf("%d", &height) != 1) || height < 0) {
+                printf("Read failed. Try again.\nVložte číslo výšky znovu: ");
+                scanf("%*s");
+            }
+            printf("Vložte šířku obdelníku:\n");
+            int width = 0;
+            while ((scanf("%d", &width) != 1) || width < 0) {
+                printf("Read failed. Try again.\nVložte číslo šířky znovu: ");
+                scanf("%*s");
+            }
+            printf("Vložte výplň obdelníku:\n");
+            char fill = ' ';
+            while (scanf("%c", &fill) != 1) {
+                printf("Read failed. Try again.\nVložte výplň znovu: ");
+                scanf("%*s");
+            }
+            draw_rectangle(height, width, fill);
+            break;
+        case 4:
+            break;
+        case 5:
+            break;
     }
 
     return 0;
