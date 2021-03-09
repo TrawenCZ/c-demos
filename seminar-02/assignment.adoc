@@ -1,0 +1,399 @@
+---
+title: "Cvičení 2: Kreslení obrazců"
+layout: "seminar"
+authors:
+  - xjaros1
+use-mathjax: true
+publish: 1
+---
+
+V tomto cvičení již začneme programovat v jazyce C.
+
+== Připomenutí z minulého cvičení
+
+V minulém cvičení jsme si zkusili vytvoření prvního programu, který
+vypisuje řetězec `Hello World!` na standardní výstup.
+
+[source, c]
+----
+#include <stdio.h>
+
+int main(void) /* Deklarace funkce main, vraci cele cislo, neprijima zadne argumenty */
+{ /* Zacatek bloku */
+
+    printf("Hello World!\n"); /* Volani funkce prinf pro vypis formatovaneho retezce */
+    return 0; /* Ukonceni prubehu funkce a predani navratove hodnoty */
+
+} /* Konec bloku -- telo funkce */
+----
+
+V tomto programu se objevují následující prvky:
+
+* `#include` direktiva preprocesoru, která vám zpřístupní funkce definované v hlavičkovém souboru,
+* `stdio.h` hlavičkový soubor, v němž se nacházejí funkce pro práci se vstupem a výstupem,
+* `int` datový typ definující celé číslo,
+* `main` jméno funkce – v případě jazyka C je nezbytné, aby existovala právě jednou pro každý spustitelný program,
+* `(void)` vstupní argumenty funkce `main`, v tomto případě žádné nejsou,
+* `{}` složené závorky definují blok, v tomto případě tělo celé funkce `main`,
+* `printf` volání funkce, která vypisuje na standardní výstup předaný formátovací řetězec a další argumenty,
+* `return` ukončuje průběh funkce a vrátí volajícímu specifikovaný návratový kód,
+  který musí být typu návratové hodnoty funkce. V případě funkce `main`
+  se návratová hodnota propaguje do volajícího shellu jako návratová hodnota procesu.
+
+
+
+=== Funkce `scanf`
+
+Před samotnými úkoly si připomeňme minulé link:../seminar-01[cvičení] a formátovací značky
+pro funkci `printf`. Tyto značky jsou univerzální pro celou standardní knihovnu jazyka C a jsou
+používané i ve funkcích pro načítání vstupu. Jednou z takových funkcí je funkce `scanf`, jejíž
+prototyp je velice podobný funkci `printf`
+
+[source,c]
+----
+int scanf(char *fmt_str, ...);
+----
+
+* `fmt_str` je formátovací řetězec (prozatím budeme řetězec uvažovat jako sekvenci znaků uzavřených
+  v dvojitých uvozovkách `"`), který říká, jaké elementy mají být načteny ze standardního vstupu,
+* `...` je výpustka (ellipsis), která značí libovolný počet dalších argumentů libovolného typu
+  (typ se odvodí z formátovacího řetězce),
+* návratová hodnota je počet úspěšných konverzí, tedy počet úspěšně zpracovaných formátovacích značek
+  z řetězce `fmt_str`.
+
+Funkce `scanf` se následně požívá stejně jako funkce `printf`, tedy jako první argument jí je předán
+formátovací řetězec a následně další proměnné, které budou naplněny hodnotami načtenými ze
+standardního vstupu. Pokud například budeme chtít načíst číslo, bude volání vypadat následovně
+
+[source,c]
+----
+int x = 0;
+scanf("%d", &x);
+----
+
+Po tomto volání bude v proměnné `x` uloženo číslo přečtené ze standardního vstupu, které bylo zadáno
+v dekadickém formátu. Nicméně, toto volání předpokládá, že funkce `scanf` neselže. Abychom ověřili,
+že se čtení podařilo, musíme ověřit návratovou hodnotu funkce `scanf`.
+
+[source,c]
+----
+int x = 0;
+if (scanf("%d", &x) != 1) {
+    printf("Read failed\n");
+}
+----
+
+Pro toto cvičení budeme uvažovat pouze dvě formátovací značky:
+
+* `%d` načtení celého čísla v dekadickém zápisu,
+* `%c` načtení právě jednoho znaku.
+
+[NOTE]
+====
+Pro načtení znaku je potřeba ve formátovacím řetězci správně použít znak mezery před specifikací
+formátovací značky. Pokud bychom zadali formátovací řetězec `"%c"`, tak funkce `scanf` načte první
+nepřečtený znak na standardním vstupu, což ovšem bude většinou nějaký bílý znak (mezera, tabulátor,
+zalomení řádku).
+
+Abychom tomuto chování předešli, budeme při načítání znaku zadávat formátovací řetězec jako `" %c"`,
+které je funkcí `scanf` interpretováno jako, přeskoč všechny bílé znaky a přečti další znak
+(tedy nutně nebílý).
+
+====
+
+[WARNING]
+====
+
+Všimněte si znaku ampersand `&` před proměnnou, do které chceme načtenou hodnotu uložit.
+Abychom nemuseli složitě zabrušovat do tajů jazyka C, nebudeme prozatím tento koncept vysvětlovat,
+ale upozorníme, že tento operátor je potřeba přidávat před proměnnou pouze v případě funkce
+*`scanf`*, pokud byste použili `&` při volání funkce `printf`, bude váš program vypisovat
+nesmysly. Zároveň, pokud zapomenete použít `&` při volání `scanf`, může nastat jedna nebo více z
+následujících možností
+
+* Kompilátor toto chování odhalí a vypíše vám warning.
+* Ukládání hodnoty selže a vy skončíte s původní hodnotou v proměnné (která může být nedefinovaná).
+* Váš program rovnou v místě volání zkolabuje na základě přijetí signálu (proces bude zabit).
+
+Pokud vám ale ampersand stále leží v hlavě, můžete si zabrousit na konec tohoto cvičení,
+kde je tento operátor rámcově vysvětlen. Nicméně vám doporučujeme vyhnout se cestování v čase
+a počkat dva týdny, kdy bude tento koncept řádně vysvětlen na přednášce.
+
+====
+
+== Úkol 1. Vykreslení čáry
+
+Od tohoto úkolu dále budeme pracovat v souboru `drawer.c`.
+
+Vaším úkolem bude napsat funkci
+
+[source,c]
+----
+// Prints line of specified length
+void draw_line(int length);
+----
+
+která na standardní výstup vypíše `length` znaků `#`.
+
+* Pomocí cyklu `while` vypisujte, dokud `length != 0`, a v každé iteraci snižte `length`.
+* Vypsat znak můžete například pomocí funkce `putchar`, která přijímá právě jeden znak typu `char`.
+* Po vypsání křížků vypíše znak `'\n'`, tedy znak konce řádku.
+
+Tuto funkci zkuste zavolat z funkce `main` několikrát s různými argumenty.
+Jak se bude funkce chovat, pokud jí předáte záporné číslo?
+
+V případě zacyklení programu je možné v linuxovém terminálu program
+ukončit pomocí kombinace kbd:[Ctrl] + kbd:[C].
+
+== Úkol 2. První vstup
+
+Pokud již máte napsanou funkci `draw_line`, můžeme nyní náš program
+nechat spolupracovat s uživatelem. Vaším úkolem bude upravit funkci
+`main` tak, aby načetla celé číslo ze vstupu a následně toto číslo
+použila jako argument funkce `draw_line`. Protože se jedná o
+uživatelský vstup, je potřeba ošetřit jeho validitu, aby určité vstupy
+nemohly způsobit například pád programu nebo nevalidní výsledek:
+
+* Použijte funkci `scanf` a načtené číslo předejte funkci `draw_line`.
+* Rozšiřte funkci `draw_line` o kontrolu validity vstupu.
+* Použijte konstrukci `if (condition) { commands; }` pro ověření validity.
+* Vstup je nevalidní, pokud je menší než `0`, řádek nulové délky validní je.
+
+Výstup vašeho programu by měl vypadat takto:
+
+[source]
+----
+$ ./drawer
+10
+##########
+----
+
+kde první řádek specifikuje spuštění programu, druhý načtení čísla a třetí výstup funkce `draw_line`.
+
+== Úkol 3. Výprava do nové dimenze
+
+Vaším úkolem bude vytvořit funkci:
+
+[source,c]
+----
+// Draws a square of specified size
+void draw_square(int size);
+----
+
+Tato funkce vykreslí čtverec o velikosti strany `size`.
+
+* Kvůli velikosti fontu v terminálech, budeme jedno políčko čtverce počítat
+  jako dva znaky. Pokud bychom použili jeden, bude náš čtverec spíše
+  obdélníkového tvaru. Tedy výpis jednoho políčka provedeme jako
+  `putchar('\#'); putchar('#');`.
+* Výsledný obrazec tedy bude mít na každém řádku `2 * size` křížků `#` a `size` řádků.
+* Stále platí, že čtverec se zápornou velikostí strany nelze vykreslit.
+* Ve funkci `main` upravte volání z `draw_line` na `draw_square`.
+* Pro vykreslení čtverce bude vhodné použít cyklus `for`.
+
+Program bude po implementaci vypisovat:
+
+[source]
+----
+$ ./drawer
+5
+##########
+##########
+##########
+##########
+##########
+----
+
+== Úkol 4. Obdélník
+
+Nyní svoji implementaci zobecníme a rozšíříme na kreslení obdélníků.
+
+[source,c]
+----
+// Draws a rectangle of specified sizes with specified characters
+void draw_rectangle(int a, int b, char fill);
+----
+* Vykreslí obdélník o délkách stran `a` a `b`.
+* `a` značí délku strany odpovídající řádku.
+* `b` značí délku strany odpovídající sloupci.
+* `fill` je znak, kterým bude obdélník nakreslený.
+* Upravte funkci `main`, tak aby nejdříve načítala dvě čísla a následně načetla jeden znak.
+* Při načítání znaku si dejte pozor na přidání mezery do formátovacího řetězce.
+* Ve funkci `main` upravte volání z `draw_square` na `draw_rectangle`.
+
+Program bude po implementaci vypisovat:
+
+[source]
+----
+$ ./drawer
+5
+3
+$
+$$$$$
+$$$$$
+$$$$$
+----
+
+== Úkol 5. Kruh
+
+Jako poslední část úkolu nyní implementujeme vykreslení kruhu do
+terminálu.
+
+[source,c]
+-----------------------------------------------------------------
+// Draws a circle of specified sizes with specified characters
+void draw_circle(int radius, char fill, char space);
+-----------------------------------------------------------------
+
+Protože kruh vám nevyplní místa v rozích, bude potřeba přidat další znak, který označí,
+co je na výsledném obrázku prázdným místem.
+
+* `radius` značí poloměr kruhu.
+* Obrázek tedy bude vysoký `2 * radius` řádek.
+* Šířka obrázku bude `4 * radius` znaků.
+* Stejně jako u čtverce použijeme jako jedno políčko dva znaky.
+* Při vykreslování musíte vypočítat, zda na dané souřadnici `[x, y]` bude kruh,
+ nebo prázdné místo.
+* Pro připomenutí analytické geometrie: středová rovnice kružnice má tvar
+  +++$(x-x_0)^2 + (y - y_0)^2 = r^2$+++, kde +++$x_0$+++ a +++$y_0$+++ jsou
+  souřadnicemi středu kružnice.
+* Kruh je množina bodů, jejichž vzdálenost je od obepínající kružnice menší nebo rovna poloměru.
+* Upravte `main`, tak aby načítal nejdříve jedno číslo a potom dva znaky.
+* I zde bude potřeba dát pozor na správné použití mezery před formátovací značkou
+* Ve funkci `main` upravte volání z `draw_rectangle` na `draw_circle`.
+* Protože to, co funkce vykreslí, se může lišit na základě podmínek, zkuste postupně nahrazovat
+  porovnání `<` a `+++<=+++` a nalezněte nejlepší kombinaci, aby váš výtvor vypadal co
+  nejpodobněji kruhu.
+
+Váš program by měl vypsat:
+
+[source]
+----
+$ ./drawer
+10
+#
+^
+^^^^^^^^^^^^^^^^^^^^##^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^##################^^^^^^^^^^^^
+^^^^^^^^##########################^^^^^^^^
+^^^^^^##############################^^^^^^
+^^^^##################################^^^^
+^^^^##################################^^^^
+^^######################################^^
+^^######################################^^
+^^######################################^^
+^^######################################^^
+^^######################################^^
+^^######################################^^
+^^######################################^^
+^^######################################^^
+^^^^##################################^^^^
+^^^^##################################^^^^
+^^^^^^##############################^^^^^^
+^^^^^^^^##########################^^^^^^^^
+^^^^^^^^^^^^##################^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^##^^^^^^^^^^^^^^^^^^^^
+----
+
+== Bonusový úkol -- Elipsa
+
+Jako bonusový úkol vytvořte funkci
+
+[source,c]
+-----
+void draw_ellipse(int aAxis, int bAxis, char fill, char space);
+-----
+
+která vykreslí na standardní výstup elipsu, kde
+
+* `aAxis` určuje šířku poloosy na ose x.
+* `bAxis` určuje šířku poloosy na ose y.
+* `fill` je znak, kterým bude elipsa vyplněna.
+* `space` je znak použitý pro prázdné místo.
+* Stejně jako v případě kruhu, nelze vykreslit elipsu se zápornými poloosami a netisknutelnými znaky.
+* Pokud je vstup nevalidní, funkce vypíše chybovou hlášku a ukončí se.
+* Podobně jako u kruhu, připomeňme si středovou rovnici elipsy +++$\left(\frac{x-x_0}{a}\right)^2 + \left(\frac{y - y_0}{b}\right)^2 = 1$+++ , kde
+** +++$x$+++ a +++$y$+++ jsou souřadnice bodu na elipse,
+** +++$x_0$+++ a +++$y_0$+++ jsou souřadnice středu elipsy,
+** +++$a$+++ je délka poloosy na ose x,
+** +++$b$+++ je délka poloosy na ose y.
+
+Po implementaci funkce `draw_ellipse` upravte funkci `main` tak, aby akceptovala
+na vstupu
+
+* celé číslo `aAxis`,
+* celé číslo `bAxis`,
+* znak pro výplň,
+* znak pro mezeru.
+
+Výstup by měl vypadat následovně:
+
+[source]
+----
+$ ./drawer
+15
+10
+#
+^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^##########################^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^##################################^^^^^^^^^^^^^^
+^^^^^^^^^^##########################################^^^^^^^^^^
+^^^^^^^^##############################################^^^^^^^^
+^^^^^^##################################################^^^^^^
+^^^^######################################################^^^^
+^^##########################################################^^
+^^##########################################################^^
+^^##########################################################^^
+^^##########################################################^^
+^^##########################################################^^
+^^##########################################################^^
+^^##########################################################^^
+^^^^######################################################^^^^
+^^^^^^##################################################^^^^^^
+^^^^^^^^##############################################^^^^^^^^
+^^^^^^^^^^##########################################^^^^^^^^^^
+^^^^^^^^^^^^^^##################################^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^##########################^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----
+
+NOTE: Ačkoliv vzorec pro výpočet elipsy obsahuje podíl, zkuste se zamyslet, zda by se tento výpočet
+nedal přepsat do celočíselné aritmetiky.
+
+== Doplňkové informace: Aneb cesta do budoucnosti a zase zpátky
+
+[quote, Miloslav Rozner, Poslanec parlamentu České Republiky]
+--
+Nechci se do toho zabrušovat, abych se pak z toho nemusel nějak vybrušovat a neřekl něco špatně.
+--
+
+Proč píšeme ve funkci `scanf` ampersand před proměnnou?::
+
+Při volání funkce zadáváme seznam argumentů, které jsou následně funkcí využity. Nicméně v jazyce
+C se předání argumentu provede kopií, tedy pokud například zavoláme funkci `draw_line` následujícím
+způsobem
++
+[source,c]
+----
+int k = 10;
+draw_line(k);
+----
++
+tak je hodnota proměnné `k` překopírována do proměnné `size` (vstupní argumenty jsou proměnné)
+existující pouze po dobu běhu funkce `draw_line`. Z toho můžete odvodit, že pokud bychom funkci
+`scanf` předali proměnnou jako takovou, potom bychom ji vlastně předali hodnotu, která je zcela irelevantní.
++
+Operátor `&` v tomto kontextu vrací adresu, na které je v paměti proměnná uložena. Pokud tedy zapíšeme
++
+[source,c]
+----
+int k = 10;
+scanf("%d", &k);
+----
++
+tak je funkci `scanf` předána adresa místo hodnoty, což je funkcí očekáváno, a `scanf` po přečtení
+hodnoty ze standardního vstupu zapíše tuto hodnotu přímo na předanou adresu. Proto, pokud při
+volání `scanf` zapomenete před proměnnou použít `&`, vyhodnotí váš program zadaný argument jako
+adresu v paměti a pokusí se na ní zapsat, což může způsobit i pád programu.
+
