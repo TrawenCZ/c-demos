@@ -51,6 +51,23 @@ void draw_circle(int radius, char fill, char space) {
 
 }
 
+void draw_ellipse(int aAxis, int bAxis, char fill, char space) {
+    for (double y = bAxis; y >= -bAxis; y--) {
+        for (double x = -aAxis; x <= aAxis; x++) {
+            if ((x/aAxis)*(x/aAxis) + (y/bAxis)*(y/bAxis) <= 1) {
+                putchar(fill);
+                putchar(fill);
+            }
+            else {
+                putchar(space);
+                putchar(space);
+            }
+        }
+        putchar('\n');
+    }
+    putchar('\n');
+}
+
 int main(void)
 {
     printf("Zde se bude kreslit!\nVložte číslo odpovídající typu obrazce (čára = 1, čtverec = 2, obdelník = 3, kruh = 4, elipsa = 5):\n");
@@ -109,7 +126,7 @@ int main(void)
             }
 
             printf("Vložte výplň kruhu:\n");
-            int fill1 = ' ';
+            char fill1 = ' ';
             while (scanf(" %c", &fill1) != 1) {
                 printf("Read failed. Try again.\nVložte výplň znovu:\n");
                 scanf("%*s");
@@ -125,6 +142,35 @@ int main(void)
             draw_circle(radius, fill1, space);
             break;
         case 5:
+            printf("Vložte velikost osy X:\n");
+            int aAxis = 0;
+            while ((scanf("%d", &aAxis) != 1) || aAxis < 0) {
+                printf("Read failed. Try again.\nVložte číslo šířky znovu:\n");
+                scanf("%*s");
+            }
+
+            printf("Vložte velikost osy Y\n");
+            int bAxis = 0;
+            while ((scanf("%d", &bAxis) != 1) || bAxis < 0) {
+                printf("Read failed. Try again.\nVložte číslo výšky znovu:\n");
+                scanf("%*s");
+            }
+
+            printf("Vložte výplň elipsy:\n");
+            char fill2 = ' ';
+            while (scanf(" %c", &fill2) != 1) {
+                printf("Read failed. Try again.\nVložte výplň znovu:\n");
+                scanf("%*s");
+            }
+
+            printf("Vložte výplň okrajů:\n");
+            char space1 = ' ';
+            while (scanf(" %c", &space1) != 1) {
+                printf("Read failed. Try again.\nVložte výplň znovu:\n");
+                scanf("%*s");
+            }
+
+            draw_ellipse(aAxis, bAxis, fill2, space1);
             break;
     }
 
