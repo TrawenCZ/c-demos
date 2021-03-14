@@ -84,7 +84,6 @@ bool decode(void)
     int16_t entry;
     int counter = 6;
     uint32_t baseconv = 0;
-    int adder = 0;
     uint16_t prnt1;
     uint16_t prnt2;
     uint16_t prnt3;
