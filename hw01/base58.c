@@ -5,26 +5,37 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-char ascii_to_base58(int ascii) {
-    if (ascii <= 8) return (ascii + '1');
+#define ALLOWED "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz\0"
+
+int ascii_to_base58(int ascii) {
+    if (ascii <= 8) return (ascii + 49);
     if (ascii <= 16) return (ascii + 56);
     if (ascii <= 21) return (ascii + 57);
     if (ascii <= 32) return (ascii + 58);
-    if (ascii <= 43) return (ascii + 'A' - 1);
-    if (ascii > 43) return (ascii + 'A');
+    if (ascii <= 43) return (ascii + 64);
+    return (ascii + 65);
 }
+
+int base58_to_ascii(int base58) {
+    if (base58 <= 57) return (base58 - 49);
+    if (base58 <= 72) return (base58 - 56);
+    if (base58 <= 78) return (base58 - 57);
+    if (base58 <= 90) return (base58 - 58);
+    if (base58 <= 107) return (base58 - 64);
+    return (base58 - 65);
+} 
 
 bool encode(void)
 {   
     int counter = 4;
-    int32_t baseconv = 0;
-    int8_t entry;
-    char prnt1;
-    char prnt2;
-    char prnt3;
-    char prnt4;
-    char prnt5;
-    char prnt6;
+    uint32_t baseconv = 0;
+    int16_t entry;
+    uint16_t prnt1;
+    uint16_t prnt2;
+    uint16_t prnt3;
+    uint16_t prnt4;
+    uint16_t prnt5;
+    uint16_t prnt6;
     while ((entry=getchar()) != EOF){
         counter--;
         baseconv <<= 8;
@@ -70,8 +81,37 @@ bool encode(void)
 
 bool decode(void)
 {
-    
-    return false;
+    int16_t entry;
+    int counter = 6;
+    uint32_t baseconv = 0;
+    int adder = 0;
+    uint16_t prnt1;
+    uint16_t prnt2;
+    uint16_t prnt3;
+    uint16_t prnt4;
+    while ((entry=getchar()) != EOF) {
+        if (!(isspace(entry))) {
+            if (strchr(ALLOWED, entry) == NULL) return false;
+            counter--;
+            baseconv *= 58;
+            baseconv += base58_to_ascii(entry);
+            if (counter == 0) {
+                counter = 6;
+                prnt1 = baseconv & 0xFF;
+                baseconv >>= 8;
+                prnt2 = baseconv & 0xFF;
+                baseconv >>= 8;
+                prnt3 = baseconv & 0xFF;
+                baseconv >>= 8;
+                prnt4 = baseconv & 0xFF;
+
+                baseconv = 0;
+                printf("%c%c%c%c", prnt4, prnt3, prnt2, prnt1);
+            }
+        }
+    }
+    if (counter != 6) return false;
+    return true;
 }
 
 // ================================
