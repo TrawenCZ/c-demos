@@ -90,7 +90,7 @@ bool decode(void)
     uint16_t prnt4;
     while ((entry=getchar()) != EOF) {
         if (!(isspace(entry))) {
-            if (strchr(BASE58_CHARS, entry) == NULL) return false;
+            if (strchr(BASE58_CHARS, entry) == NULL || entry == '\0') return false;
             counter--;
             baseconv *= 58;
             baseconv += base58_to_ascii(entry);
