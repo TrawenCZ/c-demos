@@ -27,7 +27,7 @@ int base58_to_ascii(int base58) {
 
 bool encode(void)
 {   
-    int counter = 4;
+    uint8_t counter = 4;
     uint32_t baseconv = 0;
     int16_t entry;
     uint16_t prnt1;
@@ -82,7 +82,7 @@ bool encode(void)
 bool decode(void)
 {
     int16_t entry;
-    int counter = 6;
+    uint8_t counter = 6;
     uint32_t baseconv = 0;
     uint16_t prnt1;
     uint16_t prnt2;
