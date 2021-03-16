@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-#define BASE58_CHARS "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz\0"
+#define BASE58_CHARS "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
 int ascii_to_base58(int ascii) {
     if (ascii <= 8) return (ascii + 49);
