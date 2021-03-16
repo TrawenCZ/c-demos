@@ -1,0 +1,358 @@
+---
+title: "Cvičení 3: Jednorozměrná pole a ukazatele"
+layout: "seminar"
+authors:
+  - xjaros1
+use-mathjax: true
+publish: 1
+---
+
+V minulém cvičení jsme si ukázali jak pracovat se základními řídicími
+strukturami jazyka C a práci s proměnnými. V tomto cvičení se podíváme
+na koncept polí (prozatím pouze alokovaných na zásobníku)
+a začneme pracovat s ukazateli.
+
+== Úkol 1: Jednoduché pole
+
+Jako první část napište jednoduchý program, který si od uživatele vyžádá
+deset čísel a uloží je do jednorozměrného pole. Následně vypište všech deset
+načtených čísel a jejich součet.
+
+Program by měl pro vstup:
+
+[source]
+----
+33 22 121 110 77 264 396 187 913 462
+----
+
+vypsat následující:
+
+[source]
+----
+Array: [33, 22, 121, 110, 77, 264, 396, 187, 913, 462]
+Sum: 2585
+----
+
+NOTE: Jistě jste si všimli, že zrovna tuto práci bychom dokázali i bez použití pole,
+nicméně existence pole je důležitá pro následující úkoly, proto prosím dodržte zadání.
+
+== Úkol 2: Nalezení maxima a minima v poli
+
+Napište funkce:
+
+[source,c]
+----
+int find_max_in_array(int array[10]);
+
+int find_min_in_array(int array[10]);
+
+int find_sum_in_array(int array[10]);
+----
+
+které naleznou v desetiprvkovém poli jeho maximum respektive minimum.
+Do funkce `find_sum_in_array` přesuňte všechnu funkcionalitu, která sčítá
+hodnoty v poli z funkce `main`.
+
+Následně rozšiřte svůj program o volání těchto funkcí a na standardní výstup
+vypište nalezené maximum a minimum. Pro vstup z úkolu 1 by váš program měl
+vypsat podobný výstup.
+
+[source]
+----
+Array: [33, 22, 121, 110, 77, 264, 396, 187, 913, 462]
+Sum: 2585
+Max: 913; Min: 22
+----
+
+== Úkol 3: Nalezení největšího společného dělitele
+
+Rozšiřte svůj program o nalezení největšího společného dělitele celého pole
+a o výpis násobků pole vzhledem k nalezenému děliteli.
+Implementujte funkce:
+
+[source,c]
+----
+int gcd(int a, int b);
+int find_gcd_in_array(int array[10]);
+----
+
+* `gcd` vrátí největší společný dělitel čísel `a` a `b`,
+* `find_gcd_in_array` nalezne největší společný dělitel celého pole a vrátí jej
+  jako návratovou hodnotu.
+
+Následně přidejte do funkce `main` výpis nalezeného gcd a jeho faktorů v prohledávaném poli
+ve formátu:
+
+[source]
+----
+GCD: x; Factors: [x1/x, x2/x, x3/x, x4/x, x5/x, x6/x, x7/x, x8/x, x9/x, x10/x]
+----
+
+kde:
+
+* `x` je nalezený největší společný dělitel,
+* `x1/x` -- `x10/x` jsou hodnoty pole vydělené společným dělitelem.
+
+Pro zadaný vstup z prvního úkolu by měl výpis vypadat následovně:
+
+[source]
+----
+Array: [33, 22, 121, 110, 77, 264, 396, 187, 913, 462]
+Sum: 2585
+Max: 913; Min: 22
+GCD: 11; Factors: [3, 2, 11, 10, 7, 24, 36, 17, 83, 42]
+----
+
+[NOTE]
+====
+
+Pro připomenutí:
+
+Pro nalezení největšího společného dělitele dvou čísel je
+nejlepší použít https://en.wikipedia.org/wiki/Euclidean_algorithm[Eukleidův algoritmus].
+
+Pro nalezení největšího společného dělitele více čísel můžeme využít tranzitivity
+relace být dělitelem. Pokud je `a` dělitelem `b` a `b` je dělitelem `c`,
+pak `a` je dělitelem `c`. Pokud tedy hledáme největšího společného dělitele čísel
++++$a, b, c \in \mathbb{Z} $+++, tak platí +++$\gcd(a, b, c) = \gcd(\gcd(a, b), c)$+++.
+Z toho lze usoudit, že pro nalezení největšího společného dělitele deseti čísel nám stačí
+počítat gcd iterativně pro aktuálně nalezené GCD v iteraci `i-1` (tedy GCD pro prvních `i-1`
+prvků pole) a prvek pole na indexu `i`.
+
+Pokud vám implementace Eukleidova algoritmu není jasná, podívejte se na
+https://www.fi.muni.cz/pb071/seminars/seminar-03#eukleid%C5%AFv-algoritmus[konec cvičení],
+kde je funkce `gcd` velice návodně rozepsána (až téměř k hotové funkci).
+
+====
+
+== Úkol 4: Nalezení maxima a minima jedním průchodem
+
+Jak jste si jistě všimli, funkce `find_max_in_array` a `find_min_in_array` jsou implementačně velice
+podobné. V zásadě obě funkce dělají to samé s rozdílem v porovnání hodnot. Tato implementace
+má dvě nevýhody:
+
+* funkce jsou téměř identické, což znamená, že v případě potřeby rozšíření nebo nalezení chyby
+  je nezbytné upravit dvě funkce místo jedné,
+* pro nalezení maxima i minima musíme projít celé pole, tedy v případě volání obou funkcí za
+  sebou musíme pole projít dvakrát.
+
+Implementujte funkci:
+
+[source,c]
+----
+int find_max_min_in_array(int array[10], int *max, int *min);
+----
+
+* Do ukazatelů `max` respektive `min` uloží nalezené hodnoty.
+* V případě, že jí je předán `NULL`, nebude danou hodnotu hledat (a tedy ji ani neuloží). Tedy buď
+  bude hledat obě hodnoty, pouze `max`, pouze `min`, anebo žádnou.
+* Vrací počet nalezených hodnot.
+** Pokud hledala maximum i minimum, vrátí hodnotu `2`.
+** Pokud hledala buď maximum, nebo minimum, vrátí hodnotu `1`.
+** V případě, kdy jsou oba parametry `NULL`, vrátí hodnotu `0` (a ideálně přeskočí vyhledávání).
+* Následně rozšiřte svůj main o dvě proměnné, do kterých budou hodnoty maxima či minima uloženy, a
+  zavolejte funkci `find_max_min_in_array` namísto jednotlivých volání `find_max_in_array` a `find_min_in_array`.
+* Váš výstup by se neměl prozatím změnit.
+
+== Úkol 5: Práce v obecných polích
+
+Doposud jsme pracovali s fixní šířkou pole, která nám sice poměrně zjednodušuje práci, nicméně
+pro naše algoritmy je silně omezující, protože nám umožňuje pracovat pouze s poli o pevné velikosti,
+zatímco algoritmy samotné by měly být schopny pracovat s poli libovolné délky.
+
+Rozšiřte funkce `find_gcd_in_array`, `find_max_min_in_array` a `find_sum_in_array` o další parametr `length`,
+který bude značit délku prohledávaného pole a upravte typ argumentu `array` z pole na ukazatel.
+
+[source,c]
+----
+int find_gcd_in_array(size_t length, int *array);
+
+int find_max_min_in_array(size_t length, int *array, int *max, int *min);
+
+int find_sum_in_array(size_t length, int *array);
+----
+
+[NOTE]
+====
+
+Z přednášky jistě víte, že na pole v jazyce C lze nahlížet jako na ukazatel na první prvek pole.
+Tohoto chování v této úloze využijeme, čímž umožníme práci s polem libovolné délky.
+Bohužel přetypováním pole na ukazatel ztratíme informaci o jeho délce, což nahradíme
+argumentem `length`.
+
+====
+
+[WARNING]
+====
+
+Protože do funkcí předáváme ukazatel, je nezbytné kontrolovat jeho validitu. V jazyce C
+nedokážeme typicky určit nevalidní ukazatel jinak, než jeho porovnáním proti hodnotě `NULL`.
+Nicméně, toto porovnání je naprosto nezbytné, protože ve všech našich funkcích by předání
+`NULL` jako vstupního argumentu `array` způsobilo pád programu, kvůli jeho dereferenci.
+
+====
+
+== Úkol 6: Výpis pole, aneb menší refactoring
+
+V tomto bodě jste si již pravděpodobně všimli, že váš kód se na spoustě míst opakuje
+a dělá velice podobné věci pouze s menšími obměnami. Bohužel funkce jako `find_max_min_in_array`,
+`find_gcd_in_array` a `find_sum_in_array` nyní nedokážeme opravit, protože by to od vás vyžadovalo
+znalost pokročilých konceptů, jako je například ukazatel na funkci. Nicméně, jednu část opakujícího
+se kódu upravit dokážeme. Implementujte funkci:
+
+[source,c]
+----
+void print_array(size_t length, int *array);
+----
+
+do které přesunete funkcionalitu spojenou s vypisováním pole. Pro výpis pole vyděleného největším
+společným dělitelem navíc implementujte funkce
+
+[source,c]
+----
+void copy_array(size_t length, int *orig_array, int *new_array);
+void divide_array(size_t length, int *array, int divisor);
+----
+
+* `copy_array` zkopíruje všechny hodnoty z pole `orig_array` do pole `new_array`,
+* `divide_array` vydělí všechny hodnoty v poli `array` argumentem `divisor`.
+
+Následně upravte svůj `main` tak, aby používal tyto funkce.
+
+[NOTE]
+====
+
+Možná vám nyní přijde líto mazat svoje kusy kódu, případně vás může štvát, že takové
+úpravy děláme až nyní. To je zcela záměrné, abyste si zvykli, že mazání kódu je naprosto běžná
+součást programování, která je pro tvorbu kvalitních programů nutná. Většinou
+se nám nepodaří odhalit všechny možné repetice kódu při analýze problému a iniciálním návrhu.
+Je ale velice důležité snažit se takové situace eliminovat, protože opakující se kód je signálem
+špatného návrhu a přináší s sebou širokou paletu problémů,
+ať už kvůli rozšiřitelnosti řešení (například při potřebě změnit formát výpisu), či kvůli potenciálním
+chybám. V takovýchto případech je potřeba najít veškeré kusy kódu, které se opakují, a upravit
+je.
+
+====
+
+== Úkol 7: Otestování řešení na větším poli
+
+Nyní bychom měli mít zdrojový kód, v němž se číslo 10 vyskytuje pouze u deklarace polí a při volání funkcí
+s nimi pracujících. I toto chování se pokusíme změnit. Na začátek vašeho `main.c` přidejte
+následující řádek:
+
+[source,c]
+----
+#define ARRAY_LENGTH 10
+----
+
+kterým definujete konstantu, a nahraďte výskyt čísla 10 v kódu za `ARRAY_LENGTH`. Zkuste vše přeložit a
+otestujte, že se váš program změnou nerozbil. Následně zkuste změnit konstantu `ARRAY_LENGTH`
+na hodnotu `15` a vyzkoušejte následující vstup:
+
+[source]
+----
+555 851 703 1887 1628 370 3034 1147 1739 3367 7881 4551 33855 32634 12247
+----
+
+pokud vše proběhlo jak má, váš program by měl vypsat:
+
+[source]
+----
+Array: [555, 851, 703, 1887, 1628, 370, 3034, 1147, 1739, 3367, 7881, 4551, 33855, 32634, 12247]
+Sum: 106449
+Max: 33855; Min: 370
+GCD: 37; Factors: [15, 23, 19, 51, 44, 10, 82, 31, 47, 91, 213, 123, 915, 882, 331]
+----
+
+== Bonusový úkol 8: Setříděné pole
+
+Jako bonusový úkol si zkusíme implementovat setřídění pole pomocí algoritmu https://en.wikipedia.org/wiki/Bubble_sort[bubble sort].
+
+Algoritmus bublinkového řazení je jedním z nejjednodušších (a i jeden z nejméně používaných)
+algoritmů pro třídění polí. Jeho obrovskou nevýhodou je totiž jeho složitost, která je +++$\mathcal{O}(n^2)$+++.
+Je však velice jednoduchý na implementaci. Implementujte následující funkce:
+
+[source,c]
+----
+void swap(int *x, int *y);
+
+void bubble_sort(size_t length, int *array);
+----
+
+* Funkce `swap` prohodí hodnoty uložené na adresách ukazatelů `x` a `y`.
+* `bubble_sort` předané pole setřídí pomocí bublinkového řazení.
+** Nemusíte se bát, že by funkce nefungovala. Tím, že jí předáváme pole jako ukazatel,
+   může sama vyměňovat prvky v poli tak, že se změny projeví i mimo funkci (podobně jako u `divide_array`).
+** Pokud algoritmus bubble sort neznáte, můžete se podívat
+   https://www.fi.muni.cz/pb071/seminars/seminar-03#bubble-sort[níže],
+   jak při jeho implementaci postupovat.
+* Po implementaci rozšiřte `main` o výpis:
+
+[source]
+----
+Sorted: [x1, x2, x3, ..., xn]
+----
+
+Pro vstup z minulého úkolu:
+
+[source]
+----
+555 851 703 1887 1628 370 3034 1147 1739 3367 7881 4551 33855 32634 12247
+----
+
+by měl váš program vypsat:
+
+[source]
+----
+Array: [555, 851, 703, 1887, 1628, 370, 3034, 1147, 1739, 3367, 7881, 4551, 33855, 32634, 12247]
+Sum: 106449
+Max: 33855; Min: 370
+GCD: 37; Factors: [15, 23, 19, 51, 44, 10, 82, 31, 47, 91, 213, 123, 915, 882, 331]
+Sorted: [370, 555, 703, 851, 1147, 1628, 1739, 1887, 3034, 3367, 4551, 7881, 12247, 32634, 33855]
+----
+
+
+== Doplňkové informace
+
+Zde se nachází doplňkové informace ke cvičení.
+
+=== Eukleidův algoritmus
+
+Eukleidův algoritmus je efektivním algoritmem pro nalezení největšího společného dělitele.
+Jeho implementace vyžaduje pouze znalost dvou operací na úrovní jazyka C, a to:
+
+* operátor modulo `%`, který vrací zbytek po dělení,
+* cyklus `while`, pomocí kterého rozhodneme, zda jsme gcd již našli či ne.
+
+Běh algoritmu lze popsat následujícími kroky:
+
+* Nechť jsou na vstupu dvě celá čísla `a` a `b`, `a >= b`,
+* dokud je `b` nenulové (`while (b != 0)`),
+** do `r` ulož `a` (`int r = a;` ),
+** do `a` ulož `b` (`a = b;`),
+** do `b` ulož `r % b` (`b = r % b`),
+* proměnná `a` obsahuje největšího společného dělitele (tedy ji můžete vrátit).
+
+Pokud by se vám stalo, že proměnná `a` je ostře menší než `b`, tak můžete proměnné buď prohodit, nebo
+znovu zavolat `gcd` (rekurzivně) s prohozenými argumenty `a` a `b`.
+
+=== Bubble sort
+
+Bubble sort prochází pole ve dvou vnořených cyklech, kde:
+
+* Vnější cyklus postupně omezuje tříděný rozsah pole. Nejdříve na všechny prvky a následně o jedna méně.
+* Vnitřní cyklus postupně prochází pole až po mez zadanou vnějším polem a porovnává přímo sousedící
+  elementy. Pokud jsou neuspořádané, prohodí je.
+* Po skončení vnitřního cyklu je jeden prvek (dle implementace buď na konci, nebo na začátku) pevně
+  zafixován.
+* Pro lepší představu si můžete prohlédnout následující kód v Pythonu, který běh bubble sortu
+  popisuje.
+
+[source,python]
+----
+for i in range(len(array) - 1, 0, -1):
+    for j in range(0, i):
+        if array[j] > array[j + 1]:
+            swap(array[j], array[j + 1])
+----
+
