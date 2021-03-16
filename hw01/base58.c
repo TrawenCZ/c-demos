@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <ctype.h>
 
-#define ALLOWED "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz\0"
+#define BASE58_CHARS "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz\0"
 
 int ascii_to_base58(int ascii) {
     if (ascii <= 8) return (ascii + 49);
@@ -90,7 +90,7 @@ bool decode(void)
     uint16_t prnt4;
     while ((entry=getchar()) != EOF) {
         if (!(isspace(entry))) {
-            if (strchr(ALLOWED, entry) == NULL) return false;
+            if (strchr(BASE58_CHARS, entry) == NULL) return false;
             counter--;
             baseconv *= 58;
             baseconv += base58_to_ascii(entry);
