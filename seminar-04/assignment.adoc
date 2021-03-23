@@ -1,0 +1,182 @@
+---
+title: "Cvičení 4: Vícerozměrná pole a ukazatelová aritmetika"
+layout: "seminar"
+authors:
+  - xjaros1
+publish: 1
+---
+
+V minulém cvičení jsme započali strastiplnou cestu k pochopení ukazatelů a polí.
+Nyní budeme v této cestě pokračovat, a to výpravou do vyšších dimenzí.
+
+WARNING: Pozor, ukazatelů se již do konce semestru nezbavíme a navíc budou
+hrát téměř vždy klíčovou roli! Doporučujeme proto nezaspat a pokusit se pochopit
+tyto koncepty, než bude pozdě.
+
+== Matice
+
+V této části cvičení budeme pracovat s maticemi v souboru `matrix.c`.
+
+=== Úkol 1: Základní vlastnosti vícerozměrných polí
+
+* Deklarujte v souboru `matrix.c` proměnnou `matrix` typu dvojrozměrné pole (necháme čistě
+na vás, zda se bude jednat o čtvercové pole či nikoliv).
+* Vypište na standardní výstup následující ukazatele:
+** `matrix` ve formátu `matrix is pointing to ADDRESS with size of SIZE`,
+** `matrix[0]` ve formátu `matrix[0] is pointing to ADDRESS with size of SIZE`,
+** `matrix[1]` ve formátu `matrix[1] is pointing to ADDRESS with size of SIZE`,
+** `&matrix[1][1]` ve formátu `matrix[1][1] si pointing to ADDRESS with size of SIZE`,
+* kde `ADDRESS` je celé číslo indikující adresu.
+* Pro výpis ukazatele použijte formátovací značku `%p`.
+* Pro výpis velikosti použijte značku `%zu`, jejíž hodnota bude určena operátorem `sizeof`.
+* Prohlédněte si výpis a zamyslete se nad tím, proč takto vypadá.
+
+[NOTE]
+=====
+Možná vás výpis zarazil, proto si zde pokusíme trošku vysvětlit, proč se vícerozměrná
+pole takto chovají.
+
+Vícerozměrná pole fungují v principu úplně stejně jako jednorozměrná, tedy jedná se o
+vyhrazený region v paměti, kde jsou prvky naskládány přímo za sebe, proto se lze na
+vícerozměrná pole typu `int array[M][N][K]..[Z]` dívat jako na jednorozměrná pole
+`int array[M*N*K*\...*Z]`. Nicméně, aby nám kompilátor zachoval určitou pohodlnost
+používání těchto polí, dokáže na základě typu odvodit, kdy přistupujeme k určité
+rovině (nebo chcete-li k podprostoru -- například řádek matice, rovina v
+prostoru), nebo jsme již operátor `[]` použili tolikrát, že přistupujeme ke
+konkrétní hodnotě.
+=====
+
+=== Úkol 2: Násobení skalárem
+
+Nyní zkusíme naprogramovat první předání matice do funkce, implementujte funkci
+
+[source,c]
+----
+void multiply_matrix(int mrows, int mcols, int matrix[mrows][mcols], int number);
+----
+
+která vynásobí matici zadaným skalárem.
+
+Pro testování můžete matici inicializovat náhodnými čísly pomocí funkce `fill_matrix`,
+která očekává atributy
+
+* `int min_value` -- minimální hodnota pro generování,
+* `int max_value` -- maximální hodnota pro generování,
+* `size_t mrows, size_t mcols` -- rozměry matice,
+* `int matrix[mrows][mcols]` -- matice samotná.
+
+
+=== Úkol 3: Matice jako pole
+
+Nyní se na okamžik vrátíme k minulému cvičení, kde jsme implementovali funkci
+
+[source,c]
+----
+int find_max_min_in_array(size_t length, int *array, int *max, int *min);
+----
+
+Vaším úkolem nyní bude si zkusit tuto funkci použít pro nalezení maxima a minima:
+
+* Nejdříve pro celou matici a vypsat `Max: MAX, Min: MIN`,
+* potom pro každý řádek zvlášť a vypsat `Row no. NUM, max: MAXVALUE, min: MINVALUE`,
+* využijte toho, že vaše matice je „přetypovatelná“ na jednorozměrné pole.
+
+NOTE: Pokud jste minulý týden nestihli implementovat funkci `find_max_min_in_array`, stáhněte si ji
+ze zveřejněné implementace pro minulý týden link:../seminar-03/pb071-seminar-03-solution.zip[zde].
+
+=== Úkol 4: Určení pozice maxima a minima
+
+Nyní se ponoříme do základů ukazatelové aritmetiky. Zkusíme upravit funkci `find_max_min_in_array` tak,
+aby nám místo hodnoty maxima, respektive minima, nastavila přímo ukazatele do matice.
+
+* Vytvořte funkci `find_max_min_pointers`, která bude kopií funkce `find_max_min_in_array`.
+* Upravte argumenty `min` a `max` z typu +++<code>int *</code>+++ na typ +++<code>int **</code>+++ (proč?).
+* Ve funkci main přidejte výpis `Found max in matrix VALUE on coordinates [ROW][COL]`
+* Ve funkci main přidejte výpis `Found min in matrix VALUE on coordinates [ROW][COL]`
+
+TIP: Pro tento úkol je vhodné využít pohledu na matici, jako na jednorozměrné pole.
+Potom totiž můžeme využít aritmetické vlastnosti ukazatele, jako například toho, že
+rozdíl dvou ukazatelů nám vrací jejich vzdálenost.
+
+=== Úkol 5: Hledání palindromů mezi řádky
+
+Jako poslední úkol si zkusíme s použitím ukazatelové aritmetiky zjistit, které řádky matice jsou
+palindromy. V tomto kontextu budeme palindromem rozumět pole, které je symetrické vzhledem ke
+svému středu, tedy pole bude vypadat stejně při čtení zepředu i zezadu. Například:
+
+* `[1, 2, 3, 2, 1]` je palindromem,
+* `[3, 3, 3, 3]` je palindromem,
+* `[1, 2, 3, 4, 4, 3, 2, 1]` je palindromem,
+* `[1, 2, 3, 4, 3, 2]` palindromem není,
+* `[1, 2, 3, 4, 5, 6]` taktéž není.
+
+Napište funkci
+
+[source,c]
+----
+int find_palindromes(size_t mrows, size_t mcols, int matrix[mrows][mcols], short palindromes[mrows]);
+----
+
+která pro každý řádek ověří, zda je palindromem a uloží tuto informaci na odpovídající
+index do pole `palindromes` jako:
+
+* hodnotu `1`, pokud je palindromem,
+* hodnotu `0`, pokud není.
+
+Funkce bude vracet počet nalezených palindromů.
+
+[NOTE]
+====
+
+Ačkoliv by tato funkce šla implementovat čistě pomocí indexů, ve spoustě případů (tento nevyjímaje)
+je vhodné použit pro pohyb v poli čistý ukazatel, protože tento zápis zvyšuje čitelnost kódu a
+usnadňuje jeho porozumění. Proto doporučujeme místo proměnných typu `size_t` pro reprezentaci indexů
+a následného použití operátoru `[]`, použít dvě proměnné typu `int *`. Ty budeme postupně přibližovat
+pomocí zvýšení, respektive snížení, o jedna, dokud se nepotkají, což dokážeme ověřit pomocí relačních
+operátorů `<`, `>`, `\<=` a `>=`.
+
+====
+
+== Piškvorky (bonus)
+
+Jako bonus, pokud jste příliš rychlí a již se nudíte, doimplementujeme jednoduchou konzolovou hru 
+piškvorek. Ve zdrojovém souboru `tictac.c` máte již rozpracovanou implementaci s běhovým rozhraním,
+které umí obsloužit celou hru. 
+
+=== Úkol 6
+
+Nicméně, pro úspěšné hraní je potřeba doimplementovat dvě funkce
+
+
+[source,c]
+----
+int play_turn(char board[BOARD_SIZE][BOARD_SIZE], short iteration, char player_name[2][STRING_SIZE]);
+int check_winning_move(char board[BOARD_SIZE][BOARD_SIZE]);
+----
+
+kde, 
+
+* `play_turn` realizuje zpracovaní vstupu od jednoho hráče,
+** na začátku kola vypíše jméno aktuálního hráče a načte dvě čísla reprezentující 
+umístění znaku daného hráče,
+** určení znaku hráče provede na základě proměnné `iteration`, která reprezentuje 
+hrané kolo,
+** první hráč umísťuje křížky a první iterace má index `0`, tedy iterace dělitelná dvěma je hrou
+křížků,
+** pozice jména v poli jmen odpovídá iteraci stejným způsobem (nulté je křížek, první je kolečko),
+** pokud se nepodaří zpracovat vstup, funkce vrátí hodnotu `GAMEPLAY_ERROR`,
+** pokud se zpracování podaří, vrací `GAMEPLAY_OK`,
+* `check_winning_move` kontroluje, zda některý z hráčů hru vyhrál.
+** Vítězem je hráč, kterému se podaří jeho znak umístit do řady o délce 5 buď
+*** v řádku,
+*** ve sloupci,
+*** po diagonále.
+** Pokud zatím nebyla nalezena žádná vítězná posloupnost, funkce vrátí hodnotu `NOBODY_WON`.
+** Pokud vyhrály křížky, respektive kolečka, funkce vrátí `XS_WON` respektive `OS_WON`. 
+** Pokud na herní ploše neexistuje žádné volné místo a zároveň nebyl nalezen vítězný tah,
+funkce vrátí hodnotu `DRAW`.
+
+NOTE: Při implementaci algoritmu pro `check_winning_move` si rozmyslete, jakým způsobem
+procházíte pole. Není potřeba se vydávat všemi směry, pokud víte, že jdete z vrchu dolů a zleva
+doprava (a stejná analogie bude platit i pro diagonály).
+

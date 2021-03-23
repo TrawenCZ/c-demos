@@ -25,55 +25,38 @@ int base58_to_ascii(int base58) {
     return (base58 - 65);
 } 
 
+void printer(uint32_t baseconv) 
+{
+    uint8_t array[6];
+    for (uint8_t i = 0; i < 6; i++) 
+    {
+        array[i] = ascii_to_base58(baseconv % 58);
+        baseconv /= 58;
+    }
+    baseconv = 0;
+    printf("%c%c%c%c%c%c", array[5], array[4], array[3], array[2], array[1], array[0]);
+}
+
 bool encode(void)
 {   
     uint8_t counter = 4;
     uint32_t baseconv = 0;
     int16_t entry;
-    uint16_t prnt1;
-    uint16_t prnt2;
-    uint16_t prnt3;
-    uint16_t prnt4;
-    uint16_t prnt5;
-    uint16_t prnt6;
     while ((entry=getchar()) != EOF){
         counter--;
         baseconv <<= 8;
         baseconv += entry;
-        if (counter == 0) {
+        if (counter == 0) 
+        {
             counter = 4;
 
-            prnt1 = ascii_to_base58(baseconv % 58);
-            baseconv /= 58;
-            prnt2 = ascii_to_base58(baseconv % 58);
-            baseconv /= 58;
-            prnt3 = ascii_to_base58(baseconv % 58);
-            baseconv /= 58;
-            prnt4 = ascii_to_base58(baseconv % 58);
-            baseconv /= 58;
-            prnt5 = ascii_to_base58(baseconv % 58);
-            baseconv /= 58;
-            prnt6 = ascii_to_base58(baseconv % 58);
-
-            baseconv = 0;
-            printf("%c%c%c%c%c%c", prnt6, prnt5, prnt4, prnt3, prnt2, prnt1);
+            printer(baseconv);
         }
     }
-    if (counter < 4) {
+    if (counter < 4) 
+    {
         baseconv <<= counter*8;
-        prnt1 = ascii_to_base58(baseconv % 58);
-        baseconv /= 58;
-        prnt2 = ascii_to_base58(baseconv % 58);
-        baseconv /= 58;
-        prnt3 = ascii_to_base58(baseconv % 58);
-        baseconv /= 58;
-        prnt4 = ascii_to_base58(baseconv % 58);
-        baseconv /= 58;
-        prnt5 = ascii_to_base58(baseconv % 58);
-        baseconv /= 58;
-        prnt6 = ascii_to_base58(baseconv % 58);
-
-        printf("%c%c%c%c%c%c", prnt6, prnt5, prnt4, prnt3, prnt2, prnt1);
+        printer(baseconv);
     }
     putchar('\n');
     return true;
@@ -81,32 +64,27 @@ bool encode(void)
 
 bool decode(void)
 {
-    int16_t entry;
+    int8_t entry;
     uint8_t counter = 6;
     uint32_t baseconv = 0;
-    uint16_t prnt1;
-    uint16_t prnt2;
-    uint16_t prnt3;
-    uint16_t prnt4;
-    while ((entry=getchar()) != EOF) {
-        if (!(isspace(entry))) {
-            if (strchr(BASE58_CHARS, entry) == NULL || entry == '\0') return false;
-            counter--;
-            baseconv *= 58;
-            baseconv += base58_to_ascii(entry);
-            if (counter == 0) {
-                counter = 6;
-                prnt1 = baseconv & 0xFF;
-                baseconv >>= 8;
-                prnt2 = baseconv & 0xFF;
-                baseconv >>= 8;
-                prnt3 = baseconv & 0xFF;
-                baseconv >>= 8;
-                prnt4 = baseconv & 0xFF;
+    uint16_t array[4];
+    while ((entry=getchar()) != EOF) 
+    {
+        if (isspace(entry)) continue;
 
-                baseconv = 0;
-                printf("%c%c%c%c", prnt4, prnt3, prnt2, prnt1);
+        if (strchr(BASE58_CHARS, entry) == NULL || entry == '\0') return false;
+        counter--;
+        baseconv *= 58;
+        baseconv += base58_to_ascii(entry);
+        if (counter == 0) {
+            counter = 6;
+            for (uint8_t i = 0; i < 4; i++) 
+            {
+                array[i] = baseconv & 0xFF;
+                baseconv >>= 8;
             }
+            baseconv = 0;
+            printf("%c%c%c%c", array[3], array[2], array[1], array[0]);
         }
     }
     if (counter != 6) return false;
