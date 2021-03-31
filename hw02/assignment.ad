@@ -1,0 +1,515 @@
+---
+title: "HW02: Sudoku"
+layout: "homework"
+list-of-files: ["sudoku.c"]
+publish: 2021-03-21
+deadline-early: 2021-04-01 24:00
+deadline-final: 2021-04-04 24:00
+authors:
+  - xsebek
+editors:
+  - xrucka
+---
+
+== Představení úkolu
+
+V této úloze vás nečeká nic menšího, než řešení hlavolamu známého jako
+https://cs.wikipedia.org/wiki/Sudoku[sudoku].
+Mnozí z vás si s ním již jistě zkusili poměřit síly, a pravděpodobně na něj na
+univerzitě ještě narazíte i při studiu algoritmů.
+
+Tentokrát nás ale čeká jen dílčí část celého problému - a to dosazení
+jednoznačných možností.
+A protože jde o úlohu programovací, nezbude než pojmout celou věc jako
+malou knihovnu funkcí.
+
+== Zadání
+
+Sudoku je logická hra, při které hledáme takové rozmístění číslic (jedna až
+devět) do nevyplněných políček tak, aby v každém sloupci, řádku a (zvýrazněném)
+čtverci 3x3 byla každá číslice právě jednou.
+Tedy snažíme se najít takové doplnění, které nám z nevyřešeného sudoku (vlevo)
+dá jeho řešení (vpravo).
+
+----
++-------+-------+-------+       +-------+-------+-------+
+| . . . | 4 5 6 | 7 8 9 |       | 1 2 3 | 4 5 6 | 7 8 9 |
+| . . . | 1 2 3 | 4 5 6 |       | 7 8 9 | 1 2 3 | 4 5 6 |
+| . . . | 7 8 9 | 1 2 3 |       | 4 5 6 | 7 8 9 | 1 2 3 |
++-------+-------+-------+       +-------+-------+-------+
+| 3 1 2 | . . . | 9 6 7 |       | 3 1 2 | 8 4 5 | 9 6 7 |
+| 6 9 7 | . . . | 8 4 5 |       | 6 9 7 | 3 1 2 | 8 4 5 |
+| 8 4 5 | . . . | 3 1 2 |       | 8 4 5 | 6 9 7 | 3 1 2 |
++-------+-------+-------+       +-------+-------+-------+
+| 2 3 1 | 5 7 4 | . . . |       | 2 3 1 | 5 7 4 | 6 9 8 |
+| 9 6 8 | 2 3 1 | . . . |       | 9 6 8 | 2 3 1 | 5 7 4 |
+| 5 7 4 | 9 6 8 | . . . |       | 5 7 4 | 9 6 8 | 2 3 1 |
++-------+-------+-------+       +-------+-------+-------+
+----
+
+V obecné rovině jde o úlohu nesnadnou, proto si vypomůžeme několika
+praktickými zjednodušeními, jak po stránce omezení vstupu, tak po stránce
+návrhu řešení.
+
+Jako praktické omezení problému již na vstupu nám poslouží omezení na řešitelná
+sudoku.
+Tedy taková, kde mezi žádným řádkem a sloupcem nevzniká konflikt.
+Toto omezení samo o sobě ale nestačí (co by se stalo, kdybychom ze sudoku výše
+odstranili všechny trojky a pětky)?
+Druhým omezením na vstupu tedy bude řešení
+pouze jednoznačných sudoku.
+
+Z hlediska návrhu je nejzajímavější možnost uvažovat každou buňku jako množinu
+možných ohodnocení této buňky.
+Dotyčné číslo (1, 5, ...) v ní buď je, nebo není.
+A protože nepotřebujeme obecné řešení pro množiny libovolných prvků, ale jen
+číslice 1-9, můžeme množinu reprezentovat množinou bitů.
+Toto uspořádání přináší v praxi výhodu - sudoku v paměti zabere méně místa,
+protože pro uložení stačí číselný typ s alespoň 9 bity.
+
+
+=== Reprezentace sudoku
+
+Sudoku tedy budeme reprezentovat 2D polem buněk - ``int``ů (resp. ``unsigned int``ů)
+Celé sudoku je tedy ``unsigned[9][9]``). Díky tomu, že standard C99 garantuje, že
+datový typ `unsigned int` má alespoň 16b, můžeme spolehlivě nejnižšími 9 bity
+reprezentovat přítomnost čísla v buňce.
+Pokud je možných očíslování buňky více, bude mít buňka nastaveno více bitů na
+pravdivou hodnotu.
+Jinými slovy, na každou buňku nahlížíme jako na množinu možností.
+Přiřazená čísla pak jsou množinami s jediným prvkem.
+
+----
+// BINARY
+//     8       0
+//     |       |
+//     v       v
+0000000000000001 // digit 1
+0000000100000000 // digit 9, i.e. 2^8
+----
+
+Příjemným důsledkem takové reprezentace je možnost tuto využít i pro popis
+naplnění sloupce/řádku/čtverce. Chybějící číslice díky tomuto formátu dostaneme
+obyčejnou negací spodních 9 bitů.
+
+----
+// BINARY
+//     8       0
+//     |       |
+//     v       v
+0000000111111111 // all digits set (e.g. bitset of any row in solved sudoku)
+0000000111111000 // digits 1, 2 and 3 not set
+1111111000000111 // bit complement
+0000000000000111 // lower 9 bits of the the bit complement
+----
+
+Políčka v sudoku budeme adresovat dvojicí indexů.
+Levými horním rohem jsou myšleny souřadnice 0, 0, pravým spodním rohem pak
+souřadnice 8, 8.
+A konečně, sudoku budeme do paměti ukládat po řádcích.
+
+=== Struktura úlohy
+
+Zadání budete mít za úkol vypracovat formou knihovny funkcí.
+Abyste si mohli svou implementaci vyzkoušet, přichystali jsme si i ukázkový
+`main.c`, v podobě velmi podobné mainu z referenční implementace.
+
+Funkce, které budete implementovat, můžeme rozdělit do několika logických
+skupin:
+
+* Kontrola konfliktního ohodnocení buněk.
+* Funkce pro načtení a výpis sudoku.
+* Řešič a pomocné funkce.
+
+V dodané kostře úlohy dále najdete i důrazně doporučené pomocné funkce,
+jejichž vypracování a vhodné využití vám umožní snazší řešení úlohy:
+
+* Funkce pro práci s buňkou - nastavení hodnoty, dotazy na hodnotu.
+* Funkce nedestruktivně zkoumající řádek, sloupec, čtverec.
+
+Platí, že všechny své pomocné funkce píšete do svého `sudoku.c`.
+Vaše řešení se musí zkompilovat bez chyb a varování s námi dodaným `sudoku.h`.
+
+
+== Požadavky
+
+Testy budou typicky vytvářet sudoku v paměti, dle specifikace z tohoto zadání.
+Je tedy nutné zcela přesně dodržet formát uložení dat v paměti.
+
+=== Kontrola sudoku
+
+Je snadné se v 81 číslicích upsat, a proto se nám bude hodit funkce
+
+[source,c]
+----
+bool is_valid(unsigned int sudoku[9][9]);
+----
+
+Ta zkontroluje, že mezi nastavenými číslicemi v daném řádku/sloupci/čtverci
+nejsou některé číslice dvakrát, nebo že v políčku může být alespoň jedna
+číslice.
+Pro validní sudoku vrací `true`, pro nevalidní `false` bez chybového hlášení.
+Funkce přitom uvažuje jen čísla, která jsou již dosazena.
+
+----
+<- freshly loaded sudoku
++-------+-------+-------+
+| 4 5 6 | 7 8 9 | 1 2 4 |
+| . . . | . . . | . . . |
+| . . . | . . . | . . . |
++-------+-------+-------+
+| . 2 3 | 4 5 6 | 7 8 9 | <-- row is missing 1, but no elimination has been done yet,
+| 1 . . | . . . | . . . |     thus, the cell set holds 0x1ff (or 1_1111_1111 binary)
+| . . . | . . . | . . . |
++-------+-------+-------+
+| . . . | . . . | . . . |
+| . . . | . . . | . . . |
+| . . . | . . . | . . . |
++-------+-------+-------+
+<- first eliminate_* or solve() call
++-------+-------+-------+
+| 4 5 6 | 7 8 9 | 1 2 4 | <-- duplicit digits 4
+| . . . | . . . | . . . |
+| . . . | . . . | . . . |
++-------+-------+-------+
+| ! 2 3 | 4 5 6 | 7 8 9 | <-- row is missing 1, but the square already contains
+| 1 . . | . . . | . . . |     1 - thus, solve() resulted in cell holding 0x0, 
+| . . . | . . . | . . . |     and thus, the cell is unassignable
++-------+-------+-------+
+| . . . | . . . | . . . |
+| . . . | . . . | . . . |
+| . . . | . . . | . . . |
++-------+-------+-------+
+----
+
+Funkce kontroluje jen aktuální stav, nemusí eliminovat nebo řešit sudoku.
+Zejména tedy neuvažuje políčka, ve kterých je možno více hodnot.
+
+Klíčovou otázkou při řešení sudoku je, zda vůbec potřebuje řešit.
+Napište tedy funkci `needs_solving()`, která vrátí `true` pokud se v sudoku
+nachází nějaká buňka bez přiřazené unikátní hodnoty.
+
+[source,c]
+----
+bool needs_solving(unsigned int sudoku[9][9]);
+----
+
+Dbejte přitom na to, že tato funkce nekontroluje validitu sudoku.
+Jinými slovy, každá z funkcí kontroluje něco jiného.
+Z tohoto důvodu tedy můžete předpokládat, že výsledek volání
+`needs_solving()` je definován jen pro validní sudoku.
+Můžete tedy předpokládat, že funkce teď bude volána jen nad validními
+sudoku.
+
+[CAUTION]
+====
+V referenční implementaci byla chyba, která akceptovala pole bez
+dosaditelné možnosti jako jednoznačně ohodnocené.
+V důsledku toho byl rozbitý bonus `generic_solve()`
+Pokud jste se doteď drželi referenční implementace a neimplementovali
+jste bonus, nemělo by se pro vás nic měnit.
+====
+
+=== Vstup a výstup (`load()` a `print()`)
+
+Dále implementujte dvojici funkcí pro výpis a načtení sudoku.
+Začneme tedy požadavky na tu jednodušší.
+
+[source,c]
+----
+void print(unsigned int sudoku[9][9]);
+----
+
+Tato funkce vytiskne sudoku na standardní výstup tak, aby odpovídalo níže
+uvedenému formátu, mřížce.
+
+----
++-------+-------+-------+
+| X X X | X X X | X X X |
+| X X X | X X X | X X X |
+| X X X | X X X | X X X |
++-------+-------+-------+
+| X X X | X X X | X X X |
+| X X X | X X X | X X X |
+| X X X | X X X | X X X |
++-------+-------+-------+
+| X X X | X X X | X X X |
+| X X X | X X X | X X X |
+| X X X | X X X | X X X |
++-------+-------+-------+
+----
+
+Platí, že za `X` dosadíme:
+
+* Konkrétní číslici, pokud je dána jednoznačně.
+* `'.'` (tečku) pro nejednoznačnou situaci.
+* `'!'` (vykřičník) pokud není do daného pole možné umístit žádnou číslici.
+
+[NOTE]
+====
+Zkontrolujte si, že váš výstup dokonale odpovídá vzorové implementaci a že
+nemáte například zapomenutou mezeru před koncem řádku.
+====
+
+[source,c]
+----
+bool load(unsigned int sudoku[9][9]);
+----
+
+Tato funkce - jak už název napovídá - načítá sudoku. Musí si ale poradit se
+dvěma formáty vstupu. V obecné rovině platí:
+
+* Číslice z rozsahu 1-9 kóduje konkrétní číslo.
+* `'0'` kóduje neobsazenou buňku.
+* Pokud je na vstupu více různých sudoku, jsou navzájem oddělena znakem nového
+řádku.
+* Za posledním sudoku na vstupu se může také nacházet odřádkování.
+* Sudoku je uloženo po řádcích počínaje řádkem na indexu `0`.
+* Jednotlivá sudoku budou načítána nezávisle. Můžete ale předpokládat, že pokud
+na vstupu máte 3 sudoku - A, B, C; pak pokud selže načítání sudoku B, nebude již
+načítáno sudoku C.
+* První, zjednodušený, formát obnáší jen 81 číslic, bez bílých znaků.
+V tomto jednoduchém formátu naleznete sudoku i na
+https://opensudoku.moire.org[internetu] a snadno ho načtete na otestování
+ostatních funkcí.
+Příklady ze zadání nepokrývají všechny možné stavy, důrazně tedy doporučujeme
+si vstup otestovat alespoň na sadě ``easy``.
+
+----
+000456789000123456000789123312000967697000845845000312231574000968231000574968000
+----
+
+* Pro druhý formát jsou na vstupu povoleny i znaky `'+'` , `'|'` , `'-'` a `'.'` .
+Nicméně:
+** Pokud řádek začíná znakem `'+'`, musí se za ním opakovat 3x skupina znaků
+``-------+``. Následně musí být odřádkováno.
+** Pokud řádek začíná znakem `'|'`, musí se za ním opakovat 3x skupina tří buněk
+následovaných znakem `'|'`. Následně musí být odřádkováno.
+** Skupina tří buněk je tvořena 3 číslicemi 1-9 a znakem `' '` před každou
+číslicí i za celou skupinou.
+** Jde tedy o totožný formát jako v `print()`, bez signalizace konfliktů.
+
+Pokud se nepovede vstup načíst, oznamte to na jednom řádku uživateli na
+standardní chybový výstup a vraťte `false`, v opačném případě `true`.
+
+
+=== Řešení sudoku
+
+[source,c]
+----
+bool solve(unsigned int sudoku[9][9]);
+----
+
+Funkce `solve()` dostane na vstupu 2D pole sudoku ve výše popsaném formátu
+a bude podle pravidel eliminovat možnosti nenastavených číslic, dokud nebude
+sudoku vyřešené nebo se po eliminaci nic nezmění.
+Pokud se sudoku podařilo kompletně vyřešit, vrátí `solve()` hodnotu `true`.
+V opačném případě pak `false`, a to bez ohledu na to, zda byla nějaká čísla
+dosazena či nikoliv.
+
+Eliminační pravidla (ilustrováno na řádku, vztahuje se nicméně i na sloupce
+a čtverce 3x3):
+
+* Z možností pro nedosazené buňky v řádku odebereme všechna v řádku již dosazená
+čísla.
+* Eliminaci provádíme v pořadí nejprve řádky, sloupce, čtverce, z levého horního
+rohu do pravého spodního rohu.
+
+
+[WARNING]
+====
+Řešení sudoku hledejte iterativně! To jest, opakovaně po řádcích, sloupcích
+a pod-čtvercích eliminujte možné číslice, nepoužívejte rekurzi.
+
+Uvědomte si, že eliminaci nemusíte provádět formou každý-s-každým.
+====
+
+[NOTE]
+====
+Uvažte první prázdný pod-čtverec v sudoku výše. Když si rozepíšeme požadavky
+sloupců a řádků, dostaneme:
+
+----
+DIGITS:     1 2 3 4 5 6 7 8 9
+1st row:    1 2 3
+2nd row:                7 8 9
+3rd row:          4 5 6
+1st column: 1     4     7
+2nd column:   2     5     8
+3rd column:     3     6     9
+----
+
+Což přímo zadává pozici všech devíti číslic. Sudoku výše tak vyřešíme hned
+s první vlnou eliminaci po sloupcích a řádcích.
+====
+
+
+[source,c]
+----
+bool eliminate_row(unsigned int sudoku[9][9], int row_index);
+bool eliminate_col(unsigned int sudoku[9][9], int col_index);
+bool eliminate_box(unsigned int sudoku[9][9], int row_index, int col_index);
+----
+
+Tyto tři funkce provádí vlastní eliminaci a slouží jako pomocné pro `solve()`.
+Návratovou hodnotou `true` pak signalizují provedení změny v sudoku.
+Vrácení `false` naopak signalizuje, že ke změně nedošlo.
+
+Pokud byste však při řešení narazili na sudoku, které obsahuje konflikt,
+okamžitě to na jednom řádku oznamte uživateli na standardní chybový výstup a
+ze `solve()` vraťte `false`.
+
+[NOTE]
+====
+Mohlo by se stát - a stává se to často - že eliminací nedostanete žádnou novou
+informaci. Uvažte například, co se stane, pokud odstraníme všechny číslice 6 a 9.
+Při první eliminaci se zjistí, že políčka musí obsahovat buď 6 nebo 9,
+ale nebudeme to schopni jednoznačně rozhodnout.
+
+Zjevně takto nejsme schopni vyřešit všechna (ani jednoznačná) sudoku.
+Jedná se však o užitečný výsledek, kterým by se případné univerzální řešení
+dalo najít podstatně rychleji (například v druhém bonusovém úkolu),
+nebo by ho daná aplikace mohla použít jako nápovědu pro lidského řešitele.
+====
+
+== Bonusové rozšíření
+
+Pokud sami rádi řešíte sudoku, máme pro vás ještě dva nepovinné bonusy.
+
+=== Backtracking (Bonus 1, 1b)
+
+Využijte backtracking k řešení libovolného sudoku:
+
+* Pokud nelze eliminací zjistit číslici, jednu zvolte.
+* Pro upravené sudoku zkuste najít řešení.
+* V případě, že provedená úprava k výsledku nevede, zkuste dosadit jinou z
+možností.
+* Pro popis návratové hodnoty viz `solve()`.
+
+[source,c]
+----
+bool generic_solve(unsigned int sudoku[9][9]);
+----
+
+Bonus v dodaném mainu povolíte tak, že v hlavičkovém souboru `sudoku.h`
+odkomentujete níže uvedený řádek.
+Testy bonus detekují automaticky.
+
+[source,c]
+----
+//#define BONUS_GENERIC_SOLVE
+----
+
+[source,bash]
+----
+$ cat 81x_echo_0 \
+    | /home/kontr/pb071/hw02/sudoku --raw --print --generic-solve --print
+LOAD
+
+RAW:
+000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+GENERIC_SOLVE
+SOLVED
+
+PRINT:
++-------+-------+-------+
+| 1 2 3 | 4 5 6 | 7 8 9 |
+| 4 5 6 | 7 8 9 | 1 2 3 |
+| 7 8 9 | 1 2 3 | 4 5 6 |
++-------+-------+-------+
+| 2 3 1 | 6 7 4 | 8 9 5 |
+| 5 6 4 | 9 1 8 | 2 3 7 |
+| 8 9 7 | 2 3 5 | 6 1 4 |
++-------+-------+-------+
+| 3 1 2 | 5 4 7 | 9 6 8 |
+| 6 4 5 | 8 9 1 | 3 7 2 |
+| 9 7 8 | 3 6 2 | 5 4 1 |
++-------+-------+-------+
+----
+
+[NOTE]
+====
+Uvědomte si, že i prostý příklad s vynecháním všech `4, 5` a `8, 9` vede k
+nutnosti uvážit více úrovní backtrackingu.
+
+Při vhodně nastaveném backtrackingu vám může užití rekurze výrazně zjednodušit
+kód, nevhodné užití ale k výsledku spíše nepovede.
+====
+
+
+=== Generování sudoku (Bonus 2, 1b)
+
+Napište funkci, která ze sudoku opakovaně zkusí odebrat náhodně číslice tak
+dlouho, dokud je sudoku řešitelné eliminací (`solve()`, nikoliv druhý bonus).
+Výsledkem budiž sudoku, ve kterém odebrání kterékoliv další číslice povede ke
+ztrátě možnosti získat řešení eliminací.
+
+Tento bonus v mainu povolíte odkomentováním odpovídajícího
+`#define` v `sudoku.h`.
+
+[source,c]
+----
+void generate(unsigned int sudoku[9][9]);
+----
+
+Například ze sudoku na začátku bychom mohli odebrat ještě pár čísel:
+
+[source,bash]
+----
+# echo 000456789000123456000789123312000967697000845845000312231574000968231000574968000 \
+    | /home/kontr/pb071/hw02/sudoku --seed 9 --generate --print  --raw
+LOAD
+
+GENERATE
+
+PRINT:
++-------+-------+-------+
+| . . . | . . 6 | . 8 . |
+| . . . | 1 2 . | . . 6 |
+| . . . | 7 8 . | 1 . 3 |
++-------+-------+-------+
+| . 1 . | . . . | 9 . 7 |
+| 6 . . | . . . | 8 4 . |
+| . . 5 | . . . | 3 . . |
++-------+-------+-------+
+| 2 . . | . . 4 | . . . |
+| . . . | . 3 1 | . . . |
+| 5 7 4 | 9 . . | . . . |
++-------+-------+-------+
+
+RAW:
+000006080000120006000780103010000907600000840005000300200004000000031000574900000
+----
+
+Můžete si vyzkoušet, že toto sudoku je ještě řešitelné se `solve()`, ale po
+odebrání další číslice bychom museli hádat a zkoušet možnosti.
+Podobně další aplikací `generate()` na výsledné sudoku bychom dostali již
+nezměněné sudoku.
+
+Na nevalidním vstupním sudoku není třeba vypisovat nic na výstup, stačí ve
+funkci nepokračovat.
+
+== Poznámky
+
+* Vyjma testů bonusu je vždy užito referenční `sudoku.h`.
+* Dejte si pozor, kdo vlastní paměť, ve které je sudoku uloženo. Zejména dbejte
+toho, že v C se mezi funkcemi pole nepředávají kopiemi.
+* Funkce `load()` má v proměnné `sudoku` paměť, o jejímž počátečním obsahu
+nesmíte nic předpokládat.
+* Můžete - a je to zcela správně - mít potřebu vyzkoušet referenční
+implementaci na vlastních sudoku.
+Referenční implementace nicméně předpokládá unixové ukončení řádků vstupního
+souboru.
+S převodem textového souboru ve formátu CRLF do formátu LF vám pomůže
+příkaz `dos2unix`.
+
+=== Vzorová implementace
+
+Vzorovou implementaci naleznete na Aise, sice umístěnou v
+`/home/kontr/pb071/hw02/sudoku`.
+Součástí kostry zadání je i main použitý ve vzorové implementaci, jehož
+dokončením můžete začít práci na úloze.
+
+Které přepínače zkouší kterou funkci zjistíte pomocí příkazu
+`/home/kontr/pb071/hw02/sudoku --help`.
