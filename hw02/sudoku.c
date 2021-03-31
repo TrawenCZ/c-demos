@@ -73,17 +73,16 @@ static unsigned int bitset_drop(unsigned int original, unsigned int number) {
     return original & ~number;
 }
 
-static int validating_box_bitset(unsigned int sudoku[9][9], int row_index, int col_index) {
+static bool validating_box_bitset(unsigned int sudoku[9][9], int row_index, int col_index) {
     unsigned int bitset = 0;
     for (int row = row_index; row < row_index + 3; row++) {
         for (int col = col_index; col < col_index + 3; col++) {
             if (!bitset_is_unique(sudoku[row][col])) continue;
-            if (bitset_is_set(bitset, sudoku[row][col])) { return 0; }
+            if (bitset_is_set(bitset, sudoku[row][col])) { return false; }
             bitset += sudoku[row][col];
         }
     }
-    if (bitset == 0) return 1;
-    return bitset;
+    return true;
 }
 
 
@@ -161,12 +160,10 @@ bool is_valid(unsigned int sudoku[9][9])
 {
     unsigned int cols_bitsets[9] = {0};
     unsigned int row_bitset;
-    unsigned int boxes_bitsets[3][3];
 
     for (int row = 0; row < 7; row += 3) {
         for (int col = 0; col < 7; col += 3) {
-            boxes_bitsets[row/3][col/3] = validating_box_bitset(sudoku, row, col);
-            if (boxes_bitsets[row/3][col/3] == 0) { return false; }
+            if (!validating_box_bitset(sudoku, row, col)) { return false; }
         }
     }
 
