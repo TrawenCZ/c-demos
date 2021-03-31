@@ -175,7 +175,7 @@ bool is_valid(unsigned int sudoku[9][9])
         for (int col = 0; col < 9; col++) {
             if (!bitset_is_unique(sudoku[row][col])) continue;
             if (bitset_is_set(row_bitset, sudoku[row][col]) || 
-                bitset_is_set(cols_bitsets[col], sudoku[row][col])) { return false; }
+                bitset_is_set(cols_bitsets[col], sudoku[row][col]) || sudoku[row][col] == 0) { return false; }
             row_bitset += sudoku[row][col];
             cols_bitsets[col] += sudoku[row][col];
         }
@@ -186,7 +186,7 @@ bool is_valid(unsigned int sudoku[9][9])
 
 bool error() 
 {
-    printf("Sudoku is not valid!\n");
+    fprintf(stderr, "Sudoku is not valid!\n");
     return false;
 }
 
@@ -216,34 +216,34 @@ bool solve(unsigned int sudoku[9][9])
 
 bool load_error(int input) 
 {
-    printf("Failed to load input. ");
+    fprintf(stderr, "Failed to load input. ");
     switch (input) {
         case 1:
-            puts("Mistake in '+-------+-------+-------+' separator.");
+            fprintf(stderr, "Mistake in '+-------+-------+-------+' separator.\n");
             break;
         case 2:
-            puts("Position of '|' taken by another symbol.");
+            fprintf(stderr, "Position of '|' taken by another symbol.\n");
             break;
         case 3:
-            puts("Positon of 'New Line' separator taken by another symbol.");
+            fprintf(stderr, "Positon of 'New Line' separator taken by another symbol.\n");
             break;
         case 4:
-            puts("Positon of ' ' (space) taken by another symbol.");
+            fprintf(stderr, "Positon of ' ' (space) taken by another symbol.\n");
             break;
         case 5:
-            puts("Positon of '.', '!' or '1-9' taken by another symbol.");
+            fprintf(stderr, "Positon of '.', '!' or '1-9' taken by another symbol.\n");
             break;
         case 6:
-            puts("One of symbols not in range '0-9'.");
+            fprintf(stderr, "One of symbols not in range '0-9'.\n");
             break;
         case 7:
-            puts("Input not long enough.");
+            fprintf(stderr, "Input not long enough.\n");
             break;
         case 8:
-            puts("Input too long.");
+            fprintf(stderr, "Input too long.\n");
             break;
         case 9:
-            puts("No valid input.");
+            fprintf(stderr, "No valid input.\n");
             break;
     }
     return false;
@@ -296,7 +296,7 @@ bool load_long(unsigned int sudoku[9][9]) {
                         default:
                             if (getchar() != ' ') return load_error(4);
                             loaded = getchar();
-                            if (loaded == '.') { sudoku[row][col] = 0x1FF; valid = true; }
+                            if (loaded == '.' || loaded == '0') { sudoku[row][col] = 0x1FF; valid = true; }
                             if (loaded == '!') { sudoku[row][col] = 0; valid = true; }
                             if (loaded >= '1' && loaded <= '9') { sudoku[row][col] = (1 << (loaded - '1')); valid = true; }
                             if (!valid) return load_error(5);
@@ -383,7 +383,6 @@ void print(unsigned int sudoku[9][9])
  *                              Bonus                             *
  * ************************************************************** */
 
-#ifdef BONUS_GENERATE
 void generate(unsigned int sudoku[9][9])
 {
     if (!is_valid(sudoku)) return;
@@ -418,7 +417,7 @@ void generate(unsigned int sudoku[9][9])
     }
 
 }
-#endif
+
 
 #ifdef BONUS_GENERIC_SOLVE
 bool generic_solve(unsigned int sudoku[9][9])
