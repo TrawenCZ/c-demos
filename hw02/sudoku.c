@@ -159,7 +159,7 @@ bool needs_solving(unsigned int sudoku[9][9])
 
 bool is_valid(unsigned int sudoku[9][9])
 {
-    unsigned int cols_bitsets[9] = {0,0,0,0,0,0,0,0,0};
+    unsigned int cols_bitsets[9] = {0};
     unsigned int row_bitset;
     unsigned int boxes_bitsets[3][3];
 
@@ -195,7 +195,7 @@ bool solve(unsigned int sudoku[9][9])
     if (!needs_solving(sudoku)) return true;
     if (!is_valid(sudoku)) return error();
     
-    bool row_changes, col_changes, box_changes, entering_while = true;
+    bool row_changes = false, col_changes = false, box_changes = false, entering_while = true;
 
     while (row_changes || col_changes || box_changes || entering_while) {
         row_changes = false, col_changes = false, box_changes = false, entering_while = false;
@@ -204,7 +204,7 @@ bool solve(unsigned int sudoku[9][9])
         for (int row = 0; row < 7; row += 3) { 
             for (int col = 0; col < 7; col += 3) {
                 box_changes = eliminate_box(sudoku, row, col) || box_changes; if (!is_valid(sudoku)) return false; 
-            } 
+            }
         }
     }
 
@@ -391,14 +391,14 @@ void generate(unsigned int sudoku[9][9])
     bool finished; unsigned int value_holder;
     int used_indexes[81] = {0};
 
-    for (int i = 0; i < 82; i++) {
+    for (int i = 0; i < 81; i++) {
         if (!bitset_is_unique(raw[i])) { used_indexes[i] = 1; }
     }
 
     while (true) {
         finished = false;
-        for (int i = 0; i < 83; i++) {
-            if (i == 82) finished = true;
+        for (int i = 0; i < 82; i++) {
+            if (i == 81) { finished = true; break; }
             if (used_indexes[i] == 0) break;
         }
         if (finished) break;
