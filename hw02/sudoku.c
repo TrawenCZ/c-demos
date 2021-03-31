@@ -170,9 +170,10 @@ bool is_valid(unsigned int sudoku[9][9])
     for (int row = 0; row < 9; row++) {
         row_bitset = 0;
         for (int col = 0; col < 9; col++) {
+            if (sudoku[row][col] == 0) return false;
             if (!bitset_is_unique(sudoku[row][col])) continue;
             if (bitset_is_set(row_bitset, sudoku[row][col]) || 
-                bitset_is_set(cols_bitsets[col], sudoku[row][col]) || sudoku[row][col] == 0) { return false; }
+                bitset_is_set(cols_bitsets[col], sudoku[row][col])) { return false; }
             row_bitset += sudoku[row][col];
             cols_bitsets[col] += sudoku[row][col];
         }
