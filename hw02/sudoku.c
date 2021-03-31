@@ -73,18 +73,6 @@ static unsigned int bitset_drop(unsigned int original, unsigned int number) {
     return original & ~number;
 }
 
-static bool validating_box_bitset(unsigned int sudoku[9][9], int row_index, int col_index) {
-    unsigned int bitset = 0;
-    for (int row = row_index; row < row_index + 3; row++) {
-        for (int col = col_index; col < col_index + 3; col++) {
-            if (!bitset_is_unique(sudoku[row][col])) continue;
-            if (bitset_is_set(bitset, sudoku[row][col])) { return false; }
-            bitset += sudoku[row][col];
-        }
-    }
-    return true;
-}
-
 
 /* ************************************************************** *
  *               Functions required by assignment                 *
@@ -156,6 +144,18 @@ bool needs_solving(unsigned int sudoku[9][9])
     return false;
 }
 
+static bool valid_box_bitset(unsigned int sudoku[9][9], int row_index, int col_index) {
+    unsigned int bitset = 0;
+    for (int row = row_index; row < row_index + 3; row++) {
+        for (int col = col_index; col < col_index + 3; col++) {
+            if (!bitset_is_unique(sudoku[row][col])) continue;
+            if (bitset_is_set(bitset, sudoku[row][col])) { return false; }
+            bitset += sudoku[row][col];
+        }
+    }
+    return true;
+}
+
 bool is_valid(unsigned int sudoku[9][9])
 {
     unsigned int cols_bitsets[9] = {0};
@@ -163,7 +163,7 @@ bool is_valid(unsigned int sudoku[9][9])
 
     for (int row = 0; row < 7; row += 3) {
         for (int col = 0; col < 7; col += 3) {
-            if (!validating_box_bitset(sudoku, row, col)) { return false; }
+            if (!valid_box_bitset(sudoku, row, col)) { return false; }
         }
     }
 
