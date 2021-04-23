@@ -1,0 +1,484 @@
+---
+title: "HW03: Plánovač procesov"
+layout: "homework"
+list-of-files: ["scheduler.c"]
+solution-path: /home/kontr/pb071/hw03/queuectl
+publish: 2021-04-05
+deadline-early: 2021-04-22 24:00
+deadline-final: 2021-04-25 24:00
+authors:
+  - xmikusin
+---
+
+[#intro]
+== Predstavenie úlohy
+
+Vytvorte jednoduchý plánovač procesov založený na báze
+https://en.wikipedia.org/wiki/Priority_queue[priority queue (prioritnej fronty)].
+Jedná sa o špeciálnu verziu fronty, v ktorej položky nie sú zoradené
+podľa poradia vloženia, ale podľa ich priority.
+
+Každý proces má svoj kontext,
+https://en.wikipedia.org/wiki/Nice_(Unix)[niceness], (detaily nižšie), a afinitu
+(informáciu o tom, na ktorých procesoroch smie bežať).
+
+[#assignment]
+== Zadanie
+
+Náš plánovač je obojstranne zreťazený zoznam (štruktúra `priority_queue`) s
+dynamicky alokovanými položkami (štruktúra `priority_queue_item`), zoradenými
+podľa ich priority od najviac po najmenej prioritnú. Každá položka obsahuje
+jeden proces reprezentovaný štruktúrou `process_type`.
+
+[#assignment-process-type]
+=== Štruktúra `process_type`
+
+[source,c]
+----
+typedef struct process_type
+{
+    cb_type callback;
+    void *context;
+
+    unsigned int remaining_time;
+    unsigned int niceness;
+    uint16_t cpu_mask;
+} process_type;
+----
+
+[NOTE]
+====
+Typ `cb_type` je definovaný v súbore `scheduler.h` ako ukazovateľ na
+funkciu so signatúrou `unsigned int(unsigned int time, void *context)`.
+
+Viac v sekcii link:#requirements-run-top[Funkcia `run_top`].
+====
+
+Položka obsahuje atribúty:
+
+`callback`::
+    Ukazovateľ na funkciu, ktorej zavolanie predstavuje spustenie
+    procesu na určitú dobu.
+`context`::
+    Kontext procesu. Jeho interpretácia je daná procesom samotným,
+    takže o ňom ani jeho obsahu nič nepredpokladajte. Môže byť `NULL`,
+`remaining_time`::
+    Čas, ktorý proces potrebuje, aby dokončil úlohu. Táto hodnota je
+    bezrozmerná (môžete si predstaviť ns alebo μs).
+`niceness`::
+    Viď sekcia link:#assignment-priority[Počítanie priority].
+`cpu_mask`::
+    Číslo, ktorého n-tý bit je 1 práve keď tento proces môže
+    bežať na n-tom procesore. Viď sekcia link:#requirements-get-top[Funkcia `get_top`].
+
+[#assignment-priority-queue-item]
+=== Štruktúra `priority_queue_item`
+
+[source,c]
+----
+typedef struct priority_queue_item
+{
+    struct priority_queue_item *next;
+    struct priority_queue_item *prev;
+
+    process_type process;
+} priority_queue_item;
+----
+
+Položka obsahuje atribúty:
+
+`next`, `prev`::
+    Ukazovateľ na predošlú a nasledujúcu položku.
+
+`process`::
+    Záznam o procese.
+
+[#assignment-priority-queue]
+=== Štruktúra `priority_queue`
+
+[source,c]
+----
+typedef struct priority_queue
+{
+    priority_queue_item *top;
+    priority_queue_item *bottom;
+
+    size_t size;
+} priority_queue;
+----
+
+Fronta obsahuje atribúty:
+
+`top`, `bottom`::
+    Ukazovateľ na vrch (začiatok) a spodok (koniec) fronty.
+
+`size`::
+    Veľkosť fronty, čiže počet položiek vo fronte.
+
+[#assignment-invariants]
+=== Invarianty
+
+Inštancie štruktúr musia dodržiavať nasledujúce invarianty:
+
+* Ak je fronta `q` prázdna, `q.top` a `q.bottom` sú `NULL`.
+* Položky sú vždy zoradené podľa priority. Ak `q` nie je prázdna, tak
+  `q.top` je najprioritnejšia položka a `q.bottom` je najmenej prioritná.
+  Na poradí položiek s rovnakou prioritou nezáleží.
+* `q.size` obsahuje počet položiek vo fronte.
+* Pre ľubovolný ukazovateľ na položku `i` fronty `q` platí:
+** Položka `i` je na začiatku fronty práve ak nemá predchodcu
+   (`i->prev == NULL` práve ak `q.top == i`).
+** Položka `i` je na konci fronty práve ak nemá následníka
+  (`i->next == NULL` práve ak `q.bottom == i`).
+** Položka `i` nemá predchodcu, alebo `i->prev->next == i`.
+** Položka `i` nemá následníka, alebo `i->next->prev == i`.
+* Každá položka patrí práve jednej fronte.
+* Každá položka tej istej fronty obsahuje proces s unikátnou kombináciu
+  hodnôt atribútov `callback` a `context`. Inak povedané, každé dve
+  položky fronty sa musia líšiť buď v hodnote atribútu `callback`, `context`,
+  alebo oboch.
+
+[#assignment-priority]
+=== Počítanie priority
+
+Priorita sa počíta na základe `remaining_time`, `niceness` a `cpu_mask`.
+
+https://en.wikipedia.org/wiki/Nice_(Unix)[Niceness] je (viac-menej) opak
+priority.  Čím je proces viac „nice“, tým je „ochotnejší“ pred seba pustiť
+ostatné procesy.  Tento Unixový koncept si mierne upravíme. Hodnoty
+`niceness` budú **celé čísla** v intervale [10, 50), teda najmenšie je 10,
+najväčšie je 49.
+
+Priorita procesu bude inverzná k násobku `niceness` a `remaining_time`. V
+prípade, že tento súčin je pre dva procesy rovnaký, vyššiu prioritu bude mať
+proces, ktorý je spustiteľný na menšom počte procesorov (ktorého `cpu_mask` v
+binárnej sústave obsahuje menej jednotiek). Ak ani tento údaj procesy
+neodlišuje, ich priorita je rovnaká.
+
+[#assignment-priority-example]
+==== Príklad
+
+Máme nasledujúce procesy:
+
+[source,c]
+----
+process_type a = { .remaining_time = 20, .niceness = 15, .cpu_mask = 0b01001 };
+process_type b = { .remaining_time = 10, .niceness = 30, .cpu_mask = 0b00001 };
+process_type c = { .remaining_time = 10, .niceness = 15, .cpu_mask = 0b11001 };
+----
+
+Pre `a` a `b` platí, že násobok `niceness` a `remaining_time` je 300, pre `c` je
+150.  `c` má teda vyššiu prioritu ako `a` a `b`. Proces `a` je spustiteľný na
+dvoch procesoroch, zatiaľ čo `b` je spustiteľný iba na jednom, teda `b` má
+vyššiu prioritu ako `a`.
+
+[CAUTION]
+====
+V príklade sa používa zápis číselných konštánt vo formáte `0b...`. Ten však
+nie je súčasťou štandardu C99. V tomto zadaní sa používa len pre názornosť.
+====
+
+[#requirements]
+== Požiadavky
+
+V `scheduler.c` implementujte nasledujúce funkcie z `scheduler.h`.
+
+Správnosť argumentov kontrolujte pomocou `assert` z `assert.h` v nasledujúcom
+rozsahu:
+
+* ukazatele na frontu nesmú byť `NULL`,
+* `niceness` musí byť v povolenom rozmedzí,
+* prípadne ďalšie podmienky určené v popise jednotlivých funkcií.
+
+Správanie funkcií nad frontami, ktoré porušujú niektorý invariant,
+nie je špecifikované.
+
+[#requirements-create-queue]
+=== Funkcia `create_queue`
+
+[source,c]
+----
+priority_queue create_queue(void);
+----
+
+Vytvorí, inicializuje a vráti prázdnu frontu.
+
+[#requirements-copy-queue]
+=== Funkcia `copy_queue`
+
+[source,c]
+----
+bool copy_queue(priority_queue *dest, const priority_queue *source);
+----
+
+Skopíruje položky zo `source` do `dest` a vráti `true`.
+Ak ale počas operácie zlyhá alokácia pamäte, funkcia uvoľní všetky
+bloky, ktoré si sama alokovala, vráti `false` a zanechá `dest` nezmenenú.
+
+Predpokladajte, že štruktúra `dest` je neinicializovaná. Je na volajúcom,
+aby zabezpečil, že volaním tejto funkcie nad inicializovanou frontou nespôsobí
+_memory leaks_.
+
+[#requirements-clear-queue]
+=== Funkcia `clear_queue`
+
+[source,c]
+----
+void clear_queue(priority_queue *queue);
+----
+
+Vyprázdni frontu `queue` tj. uvoľní položky a nastaví atribúty tak, aby
+po skončení funkcie platili invarianty.
+Je na volajúcom, aby dynamicky alokované kontexty procesov uvoľnil sám.
+
+[#requirements-push-to-queue]
+=== Funkcia `push_to_queue`
+
+[source,c]
+----
+enum push_result push_to_queue(priority_queue *queue, process_type process);
+----
+
+V `scheduler.h` sa nachádza nasledujúci `enum`:
+
+[source,c]
+----
+enum push_result {
+    push_success,
+    push_duplicate,
+    push_inconsistent,
+    push_error
+};
+----
+
+Pokiaľ vo fronte už existuje proces, ktorého atribúty `callback` a `context`
+majú rovnakú hodnotu, ako zodpovedajúce atribúty argumentu `process`:
+
+* pokiaľ `remaining_time`, `niceness` a `cpu_mask` procesov sa rovnajú, vráti
+  `push_duplicate`,
+* inak vráti `push_inconsistent`.
+
+Inak do fronty na príslušné miesto vloží novú položku a vráti `push_success`. Ak
+zlyhala alokácia pamäte, vráti `push_error`.  V prípadoch, kedy sa vracia niečo
+iné, než `push_success`, sa obsah fronty nemení.
+
+[#requirements-get-top]
+=== Funkcia `get_top`
+
+[source,c]
+----
+process_type* get_top(const priority_queue *queue, uint16_t cpu_mask);
+----
+
+Z položiek spustiteľných na niektorom z voľných procesorov vráti atribút
+`process` tej položky, ktorá je najbližšie vrcholu fronty. Argument `cpu_mask`
+určuje, ktoré procesory sú aktuálne voľné. N-tý procesor je voľný práve ak n-tý
+bit `cpu_mask` je 1.  Funkcia nemení obsah fronty.
+
+Pokiaľ sa žiadny vyhovujúci proces vo fronte nenachádza, vráti `NULL`.
+
+[#requirements-pop-top]
+=== Funkcia `pop_top`
+
+[source,c]
+----
+bool pop_top(priority_queue *queue, uint16_t cpu_mask, process_type *out);
+----
+
+Odstráni položku čo najbližšie vrchu fronty (pozor na správne zaobchádzanie s
+pamäťou a integritu fronty), ktorej proces sa dá spustiť na jednom z voľných
+procesorov. V prípade, že `out` nie je `NULL`, do neho skopíruje atribút
+`process` vybranej položky. Vráti `true`. Argument `cpu_mask` funguje ako
+vo funkcii `get_top`.
+
+Je na volajúcom, aby dynamicky alokovaný kontext procesu uvoľnil sám.
+
+Pokiaľ sa žiadny vyhovujúci proces vo fronte nenachádza, neurobí nič a vráti
+`false`.
+
+[#requirements-run-top]
+=== Funkcia `run_top`
+
+[source,c]
+----
+unsigned int run_top(priority_queue *queue, uint16_t cpu_mask, unsigned int run_time);
+----
+
+Spustí proces (zavolá `callback` s argumentami `run_time` a `context`) čo
+najbližšie vrcholu fronty, ktorý môže byť spustený na jednom z voľných
+procesorov. Argument `cpu_mask` funguje ako vo funkcii `get_top`.
+
+Pokiaľ návratová hodnota funkcie `callback` je rovná nule, znamená to, že proces
+skončil; funkcia odstráni danú položku z fronty a vráti 0. Inak návratová
+hodnota predstavuje odhad **navýšenia** času, ktorý potrebuje proces oproti
+pôvodnému odhadu na dokončenie. Atribút `remaining_time` procesu sa teda nastaví
+na +
+`max(remaining_time - run_time, 0) + cb_ret` +
+kde `cb_ret` je návratová
+hodnota `callback`. `run_top` vtedy vráti novú hodnotu `remaining_time`.
+
+Je na volajúcom, aby dynamicky alokovaný kontext procesu, ktorý sa pri
+volaní funkcie zrušil, uvoľnil sám.
+
+Pokiaľ je fronta prázdna alebo žiadny vyhovujúci proces neexistuje, vráti 0.
+
+[#requirements-renice]
+=== Funkcia `renice`
+
+[source,c]
+----
+bool renice(
+    priority_queue *queue,
+    cb_type callback,
+    void *context,
+    unsigned int niceness
+);
+----
+
+Ak sa vo fronte nenachádza žiadny proces, ktorého atribúty `callback` a `context`
+majú hodnoty rovné zodpovedajúcim argumentom funkcie, vráti `false`.
+
+Inak zmení `niceness` daného procesu na novú hodnotu a vráti `true`.
+
+[#notes]
+== Poznámky
+
+* Funkcie **nemusíte** implementovať v poradí, v akom sú v zadaní.
+* Dobré je uvedomiť si, že niektoré funkcie sa možno dajú použiť pri
+  implementácii ostatných funkcií, alebo s nimi môžu mať spoločnú funkcionalitu,
+  ktorá sa dá extrahovať do samostatnej pomocnej funkcie.
+* Pre testovanie si môžete zmeniť definíciu `cb_type` napríklad na `int`,
+  ak chcete.  Nezabudnite ale, že sa odovzdáva iba súbor `scheduler.c`! Do
+  `scheduler.h` si nepridávajte vlastné definície, testy budú používať
+  vzorovú verziu `scheduler.h`.
+
+
+* Vaše riešenie musí byť schopné sa preložiť na Aise
+  príkazom `gcc -std=c99 -pedantic -Wall -Wextra -Werror main.c scheduler.c`.
+* Vo vašom riešení nesmie dochádzať k memory leakom.
+* Používajte Valgrind (`valgrind --leak-check=full ./path/to/a.out`). Pri
+  kompilácii tiež používajte prepínač `-ggdb3`, Valgrind tak bude v prípade
+  problémov vedieť vypísať mená funkcií a čísla riadkov, kde k nim došlo.
+* Na štandardný výstup (ani štandardný chybový) za žiadnych okolností
+  nič nevypisujte.
+
+[CAUTION]
+====
+Testy nanečisto zámerne nekontrolujú _memory leaks_, aby ste si riešenie
+otestovali poriadne sami pomocou Valgrindu. Dajte si však pozor, testy
+naostro túto kontrolu používať budú.
+
+Môže sa zísť link:{{ '/man/#Valgrind' | relative_url }}[návod k Valgrindu v manuáli predmetu].
+====
+
+.Pre zopakovanie
+[TIP]
+====
+Vrch fronty = začiatok fronty = vysoká priorita = nízka hodnota
+`niceness` a `remaining_time`.
+====
+
+[#notes-cli-tool]
+=== Interaktívne ovládanie z príkazového riadku
+
+V súbore `main.c` je čiastočne naprogramované interaktívne rozhranie pre
+príkazový riadok, ktoré vám môže pomôcť pri testovaní, v prípade, ak sa
+rozhodnete implementáciu dokončiť. Existujú v ňom dva druhy procesov - tie, ktoré
+počítajú súčet poľa čísel, a tie, ktoré postupne vypisujú znaky z reťazca. Viac
+sa dozviete z komentárov v súbore `main.c`.
+
+.Vzorová implementácia
+[TIP]
+====
+Kompletné vzorové riešenie je k dispozícii na Aise:
+
+```
+{{page.solution-path}}
+```
+====
+
+Príkazy funkcií:
+
+* `create <queue name>`
+* `copy <dest name> <src name>`
+* `clear <queue name>`
+* `push <queue name> <process id> <remaining time> <niceness> <cpu mask>`
+* `get_top <queue name> <cpu mask>`
+* `pop_top <queue name> <cpu mask>`
+* `run_top <queue name> <cpu mask> <time>`
+* `renice <queue name> <process id> <niceness>`
+
+Extra príkazy:
+
+* `list` vypíše všetky príkazy.
+* `show [queue name]` vypíše procesy zo zvolenej fronty, alebo názvy
+  všetkých front, ak parameter `queue name` nebol dodaný.
+* `sum <process_name> <number>*` nastaví pamäť procesu tak, aby počítal súčet
+  daných čísel (počet argumentov `number` je variabilný).
+* `print <process_name> <string>` nastaví pamäť procesu tak, aby vypisoval
+  znaky z reťazca.
+* `quit`
+
+Proces, ktorý nie je ani `sum` ani `print`, nevykoná nič.
+
+[#notes-debug-output]
+=== Ladiaci výpis
+
+Žiadna funkcia vo vašom riešení nesmie za žiadnych okolností vypísať nič na
+štandardný výstup (`stdout` ani `stderr`).
+Snažte sa preto čo najviac používať debugger.
+
+Na druhej strane, výpisy môžu byť užitočné pre automatizáciu testovania.
+Z toho dôvodu kostra obsahuje pripravené parametrické makro `DEBUG`.
+Príkazy, ktoré nim obalíte, sa vykonajú len ak je zároveň definované
+makro `CONFIG_ENABLE_DEBUG`.
+
+_Toto makro v testoch nastavené nebude,_ takže tam sa tieto príkazy nevykonajú.
+
+Makro `DEBUG` berie ako jediný parameter príkaz (_statement_):
+
+[source,c]
+----
+int function(void)
+{
+    printf("stdout: Always shown.\n");
+
+    DEBUG(printf("stdout: Shown only in debugging environment.\n"));
+    DEBUG(fprintf(stderr, "stderr: Shown only in debugging environment.\n"));
+}
+----
+
+Parametrom môže byť okrem volania funkcie akýkoľvek príkaz, odporúčame
+však používať len čistý výpis funkciou `printf`, `puts` atď.
+
+[CAUTION]
+====
+Dajte si veľký pozor na to, aby príkaz v makre `DEBUG` nijak nezasahoval
+do výpočtu funkcie.
+Testy makro `DEBUG` vypnú, takže sa tieto príkazy nevykonajú.
+====
+
+Pri ručnom preklade na príkazovom riadku zapnete ladiace makro pridaním prepínača
+`-DCONFIG_ENABLE_DEBUG` za príkaz `gcc`, teda takto:
+
+[source]
+----
+gcc -std=c99 … -DCONFIG_ENABLE_DEBUG … -o queuectl main.c queue.c
+----
+
+Konfigurácia prekladu v `CMakeLists.txt` ladiaci výstup zapína automaticky.
+Ak ho chcete vypnúť, zmeňte hodnotu prepínača `ENABLE_DEBUG` na `OFF`.
+To je užitočné a odporúčané, ak si chcete vyskúšať, že niekde nepoužívate
+`printf` (alebo inú funkciu) mimo `DEBUG`.
+
+[WARNING]
+====
+**Nepridávajte si do riešenia `stdio.h`, ani si nepovoľujte makro
+ `CONFIG_ENABLE_DEBUG` explicitne pomocou `#define` v zdrojovom kóde!**
+
+
+Kostra je od začiatku nastavená tak, že použitie `printf` alebo podobnej
+funkcie mimo `DEBUG` spôsobí pri kompilácii bez zapnutého ladenia chybu.
+To má slúžiť ako záchranná sieť, aby ste pre zabudnutý výpis neprišli
+v testoch o body.
+====

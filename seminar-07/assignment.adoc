@@ -1,0 +1,382 @@
+---
+title: "Cvičení 7: Spájaný zoznam"
+authors:
+  - xlacko1
+layout: seminar
+publish: 1
+---
+
+= Cvičení 7: Spájaný zoznam
+
+Toto je prvá časť z trilógie cvičení zameraných na dátové štruktúry,
+jednotkové testovanie, vstup a výstup. Cieľom tohto
+cvičenia je naimplementovať **jednosmerný a obojsmerný spájaný zoznam** (angl.
+__linked list__). Funkčnosť implementácie si overíte priloženými
+jednotkovými testami napísanými v
+https://github.com/spito/testing[testovacom nástroji] od J. Weisera.
+
+[#assignment]
+== Zadanie
+
+V hlavičkovom súbore `list.h` sa nachádza deklarácia typov `struct node` a
+`struct list`, ktoré budú tvoriť uzly zoznamu resp. celý zoznam. Okrem
+toho tu nájdete deklarácie a dokumentáciu k funkciám, ktoré
+implementujete v `list.c`.
+
+[faicon=graduation-cap]
+TIP: Stručné vysvetlenie teórie k spájaným zoznamom nájdete na
+link:#theory[konci tejto stránky].
+
+Aby nedochádzalo ku zmätkom v implementácii, zjednoznačníme terminológiu
+použitú v zadaní cvičenia:
+
+**zoznam**::
+inštancia štruktúry `struct list`
+**uzol zoznamu**::
+inštancia štruktúry `struct node`
+**prvok alebo položka zoznamu**::
+hodnota, na ktorú ukazuje atribút `data` štruktúry `struct node`
+
+[TIP]
+.Typové aliasy
+====
+Ak chcete, môžete si k jednotlivým typom vyrobiť
+alias pomocou kľúčového slova `typedef`. Dajte si však pozor na konvencie
+a konflikty s cieľovou platformou.
+====
+
+****
+
+[NOTE,faicon=jedi]
+.Pre pokročilejších
+====
+Na začiatku hlavičky `list.h` sa nachádzajú makrá, ktorými si môžete
+zapnúť trochu zaujímavejšie (a zložitejšie) vlastnosti zoznamu.
+====
+
+`LLIST_ENABLE_TWO_LINKS`::
+  Povolí v štruktúre `node` ukazateľ na predcházajúci prvok, tzn. `prev`,
+  čím sa zo zoznamu stane dvojsmerný zoznam (_doubly-linked list_).
+  Toto makro si zapnite napr. po dokončení implementácie jednosmerného zoznamu.
+
+`LLIST_ENABLE_FAM`::
+  Namiesto `node->data` ako ukazateľ na ďalšiu pamäť zmení štruktúru
+  uzla tak, aby `data` bolo tzv. _Flexible Array Member_ (vlastnosť jazyka C
+  od C99). Stručné vysvetlenie je na konci cvičenia.
+
+`LLIST_ENABLE_ALL_ENDS`::
+  Povolí testy a operácie pre _Bonus 1_.
+****
+
+[#assignment-testing]
+=== Testovanie
+
+Svoju implementáciu môžete testovať nastavením týchto cieľov pre cmake:
+
+- `playground`: vlastný kód v `main.c`
+- `tests`: jednotkové testy v `tests/tests.c`
+- `tests-bonus`: testy pre pokročilé operácie so zoznamom (bonus 2)
+
+Testy sú napísané tak, aby pri správnej implementácii uvoľňovali všetku
+použitú pamäť. Môžete teda použiť `valgrind` na otestovanie korektnej
+práce s pamäťou.
+
+NOTE: Pokiaľ nie je pri funkciách explicitne uvedené chovanie na `NULL`
+argumentoch, nie je chovanie v takom prípade definované a **netestuje sa**.
+Odporúčame na takéto prípady použiť makro `assert()`.
+
+[#assignment-debugging]
+=== Ladenie
+
+Testovací nástroj púšťa testy v samostatných podprocesoch, čo spôsobí,
+že ladenie z IDE pravdepodobne nebude fungovať podľa očakávania
+(testy sa spustia, ale program nezastaví na breakpointe).
+
+Toto chovanie sa vypne povolením makra `DEBUG` pri kompilácii:
+
+* **na príkazovom riadku** pridajte ku kompilácii prepínač `-DDEBUG`
+* v QtCreatore sa prepnite do režimu **Debug** v možnostiach, ktoré sú
+  v ľavom dolnom paneli s ikonou počítača +
+
+Alternatívne si môžete napísať krátky kód do `playground` a ladiť ten.
+
+[#task01]
+== Úloha 1: Inicializácia
+
+TIP: Ak si nie ste istí, ako máte niektorú z nasledujúcich operácií
+implementovať, urobte si obrázok.
+
+Každá dátová štruktúra má nejaký __počiatočný stav__, do ktorého sa musí
+dostať predtým, než sa s ňou začne pracovať. V tomto prípade bude týmto
+stavom __prázdny zoznam__.
+
+Implementujte inicializačnú funkciu:
+
+[source,c]
+----
+void list_init(struct list *list, size_t element_size);
+----
+
+* požiadavky nájdete v dokumentácii v hlavičkovom súbore `list.h`
+* `element_size` je veľkosť prvkov, ktoré sa budú v zozname ukladať
+
+[#task02]
+== Úloha 2: Vkladanie prvkov do zoznamu
+
+[source,c]
+----
+bool list_push_back(struct list *list, const void *data);
+----
+
+Funkcia vytvorí nový uzol vrátane miesta pre **kópiu** pamäte,
+na ktorú ukazuje `data`. Veľkosť tohto bloku dostal zoznam
+ako parameter funkcie `list_init()`.
+
+Vráti `true` ak sa operácia úspešne dokončí, inak vráti `false`.
+
+Ak ste si zapli `LLIST_ENABLE_FAM`, alokujte uzol spolu s pamäťou.
+Inak musíte použiť alokácie dve, prípadne môžete použiť nejaký
+trik, ktorý `FAM` simuluje.
+
+[#task03]
+== Úloha 3: Veľkosť a test prázdnosti zoznamu
+
+Teraz, keď už viete do zoznamu pridávať prvky, ukážeme si jednoduché
+funkcie na zisťovanie informácií o zozname:
+
+[source,c]
+----
+size_t list_size(const struct list *list);
+bool list_is_empty(const struct list *list);
+----
+
+Prvá funkcia vráti počet prvkov v zozname, druhá vráti `false` práve ak
+v zozname existuje aspoň jeden prvok; inak vráti `true`.
+
+.Implementácia nesmie byť zbytočne neefektívna!
+[WARNING]
+====
+Hoci triviálna implementácia `list_is_empty()` volá `list_size()`, takáto
+implementácia by spomalila z konštantnej zložitosti na lineárnu.
+====
+
+[#task04]
+== Úloha 4: Výber zo začiatku zoznamu
+
+[source,c]
+----
+bool list_pop_front(struct list *list, void *data);
+----
+
+Funkcia zmaže prvý uzol zoznamu. Ak parameter `data` nie je `NULL`, potom
+na adresu `data` skopíruje pred zrušením uzla hodnotu prvku.
+
+Vráti `false` ak sa funkcia zavolala na prázdnom zozname, inak vráti `true`.
+
+.IB002 Strikes Back
+[TIP,faicon=question]
+====
+Viete, ktorú abstraktnú dátovú štruktúru môžete funkciami `list_push_back()`
+a `list_pop_front()` simulovať?
+====
+
+[#task05]
+== Úloha 5: Rušenie zoznamu
+
+Ak už nie je dátová štruktúra potrebná, je potrebné ju zrušiť tak, aby
+pritom uvoľnila všetky alokované zdroje.
+
+[source,c]
+----
+void list_destroy(struct list *list);
+----
+
+V prípade zoznamu to znamená uvoľniť všetky jeho uzly.
+
+[#task06]
+== Bonus 1: Vkladanie a výber z ostatných koncov
+
+Na povolenie testov tejto časti si povoľte makro `LLIST_ENABLE_ALL_ENDS`
+na začiatku `list.h`. Tieto funkcie sú za normálnych okolností vypnuté,
+aby ste na cvičení nemali príliš veľa výpisu z testov.
+
+[source,c]
+----
+bool list_push_front(struct list *list, const void *data);
+bool list_pop_back(struct list *list, void *data);
+----
+
+Operácie sú analogické ku `list_push_back()` a `list_pop_front()`.
+
+[CAUTION]
+====
+Ak implementujete riešenie **bez** `LLIST_ENABLE_TWO_LINKS`, rozmyslite si,
+či a ako sa dá `list_pop_back()` implementovať v _O(1)_ a ak nie, čo iné
+musíte urobiť.
+====
+
+[#bonus]
+== Bonus 2: Pokročilé operácie nad zoznamom
+
+CAUTION: Túto časť riešte len vtedy, ak všetky testy v základnej časti
+a _Bonus 1_ prechádzajú.
+
+Predchádzajúce operácie úplne stačia na plnohodnotné používanie zoznamu.
+Pri častom používaní by ste však zistili, že niektoré kusy kódu
+pracujúce so zoznamom sa začnú opakovať. Preto implementujte pomocné
+funkcie, ktoré rozšíria operácie nad zoznamom.
+
+V súbore `list_utils.h` sú deklarované funkcie a pomocné typy
+vrátane ich dokumentácie, z ktorej vyčítajte požadované chovanie
+funkcií. Implementáciu píšte do `list_utils.c`. Môžete znova
+používat `playground` alebo testy, tentokrát v cieli
+`tests-bonus` (súbor `bonus_tests.c`).
+
+[#theory]
+== Zhrnutie teórie
+
+[#sl-list]
+=== Jednosmerný spájaný zoznam
+
+Existuje niekoľko rôznych spôsobov, ako implementovať jednosmerný spájaný
+zoznam. Na tomto cvičení bude zoznam tvorený uzlami typu `struct node`,
+začiatok a koniec zoznamu bude udržovať štruktúra `struct list`.
+Pospájané uzly vytvárajú štruktúru podobnú tejto (obrázok bol prevzatý
+z článku https://en.wikipedia.org/wiki/Linked_list[Linked list] na Wikipédii):
+
+image::sllist.svg[Singly Linked List,role="my-3"]
+
+Rozdiel je v tom, že uzol neobsahuje hodnotu priamo, ale obsahuje
+ukazateľ na pamäť s hodnotou (špecialita pre C99 _Flexible Array Member_
+umožňuje uložiť variabilne veľké dáta priamo v uzli).
+
+[#sl-list-properties]
+==== Vlastnosti
+
+Aby nedošlo k chybám z nepozornosti, musia pre každú **korektnú**
+štruktúru `struct list` platiť tieto pravidlá:
+
+. `list\->head == NULL` vtedy a len vtedy, ak `list\->tail == NULL`
+  (ak `head` aj `tail` sú `NULL`, považujeme zoznam za prázdny)`
+. ak má zoznam aspoň jeden uzol, potom `list\->tail\->next == NULL`
+  (tj. posledný prvok nemá následníka)
+. pre dva ľubovoľné (ale rôzne) uzly zoznamu _a_ a _b_ platí, že cesta
+  z _a_ do _b_ existuje práve vtedy, ak **neexistuje** cesta z _b_ do _a_
+  (cestou myslíme postupné prechádzanie `node\->next`).
+
+Všetky operácie okrem `list_init()` predpokladajú na vstupe zoznam,
+ktorý tieto podmienky splňuje, a operácie tieto vlastnosti musia
+zachovávať.
+
+[#sl-list-operations]
+==== Popis operácií
+
+TIP: K tomuto popisu je najlepšie urobiť si obrázok počas toho, ako ho čítate.
+
+**Inicializácia**::
+Nový zoznam je inicálne prázdny, takže stačí
+nastaviť `list\->head` a `list\->tail` na `NULL` podľa **1**.
+
+**Vkladanie prvku na koniec**::
+Predpokladajme, že nový uzol zoznamu `node` je alokovaný.
++
+Ak je zoznam prázdny podľa **1**, potom `list\->head` a
+`list\->tail` nastavíme na tento uzol. V opačnom prípade
+nastavíme `list\->tail\->next` na `node`. Následne zmeníme
+`list\->tail` na nový uzol a v ňom ukazatele upravíme tak, aby
+platilo **2**.
+
+**Výber prvku zo začiatku**::
+Ak má zoznam len jeden prvok, v zozname nastavíme `list\->head` a `list\->tail`
+na `NULL`. Ak je v zozname viac uzlov, potom `list\->head` posunieme na ďalši
+uzol. Ak sa `list\->head` vynulovalo, vynulujeme aj `list\->tail`.
++
+Starý uzol dealokujeme.
++
+__Vkladanie a výber z ostatných koncov funguje analogicky.__
+Treba si však dať pozor, že výber z konca vyžaduje lineárny prechod zoznamom,
+aby sme našli predposledný prvok.
+
+**Zmazanie zoznamu**::
+V cykle odstraňujeme uzly z jedného konca, až kým sa zoznam nevyprázdni.
+Uložené dáta je však potrebné uvoľniť pomocou dealokačnej funkcie.
+
+[#dl-list]
+=== Dvojsmerný spájaný zoznam
+
+Na rozdiel od jednoduchého má navyše každý uzol odkaz na svojho
+predchocu. Takto je možné zoznam prechádzať oboma smermi jednoduchšie
+a všetky operácie výberu alebo vkladania prvkov na oboch koncoch
+sa dajú implementovať v _O(1)_.
+
+Pospájané uzly vytvárajú štruktúru podobnú tejto (obrázok bol prevzatý
+z článku https://en.wikipedia.org/wiki/Doubly_linked_list[Doubly linked
+list] na Wikipédii):
+
+image::dllist.svg[Doubly Linked List,role="my-3"]
+
+[#fam]
+=== Flexible Array Member
+
+Ak potrebujeme v štruktúre odkazovať na pamäť vopred neznámej veľkosti,
+môžeme to urobiť jednoducho pridaním ukazateľa:
+
+[source,c]
+----
+struct person {
+    unsigned age;
+    char *name;         // <- pointer (address of another block)
+};
+
+struct person *new_person(unsigned age, const char *name)
+{
+    struct person *person = malloc(sizeof(struct person));
+    if (person == NULL) {
+        error(/* Allocation failed. */);
+    }
+
+    person->name = malloc((strlen(name) + 1) * sizeof(char));
+    if (person->name == NULL) {
+        error(/* allocation failed */;
+        /* Do not forget to free(person) somewhere around here! */
+    }
+
+    person->age = age;
+    strcpy(person->name, name);
+
+    return person;
+}
+----
+
+Od jazyka C99 je však možné ako posledný atribút štruktúry deklarovať
+tzv. _Flexible Array Member_, ktorý predstavuje pamäť _za_ štruktúrou,
+do ktorej je možné pristupovať.
+
+Pre tento atribút nie je nutné alokovať pamäť samostatne, ale môžeme
+ju vytvoriť rovno s pamäťou pre flexibilný atribút:
+
+[source,c]
+----
+struct person {
+    unsigned age;
+    char name[];        // <- flexible array member
+};
+
+struct person *new_person(unsigned age, const char *name)
+{
+    size_t name_length = strlen(name);
+
+    struct person *person = malloc(sizeof(struct person) + name_length + 1);
+    if (person == NULL) {
+        error(/* Allocation failed. */);
+    }
+
+    person->age = age;
+    strcpy(person->name, name);
+
+    return person;
+}
+----
+
+V prípade, že atribút nie je reťazec, je potrebné si veľkosť alokovaného
+bloku často pamätať inak, napr. v atribúte štruktúry.

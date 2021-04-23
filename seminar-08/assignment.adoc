@@ -1,0 +1,389 @@
+---
+title: "Cvičení 8: Súbory"
+layout: "seminar"
+authors:
+  - xlacko1
+publish: 1
+---
+
+Toto cvičenie má za cieľ precvičiť si základy práce so súbormi.
+
+[#intro]
+== Úvod
+
+Doteraz ste, možno nevediac, s troma súbormi pracovali. Konkrétne
+so štandardným vstupom `stdin`, výstupom `stdout` a chybovým výstupom
+`stderr`. Tieto súbory automaticky otvára systém pri spustení programu
+a zatvára ich pri ukončení.
+
+Operácie ako `printf()`, `scanf()` a `getchar()`, ktoré ste doteraz používali,
+implicitne pracujú s týmito súbormi. Sú to však typicky len špecifické
+verzie iných funkcií, napr. `fprintf()`, `fscanf()` a `fgetc()`, ktoré umožňujú
+zadať súbor, s ktorým funkcia pracuje.
+
+Zhrnutie teórie z prednášky k súborom je na konci zadania.
+
+NOTE: Toto cvičenie sa skladá z viacerých programov.
+V každej úlohe **nezabudnite prepnúť cieľ** v nastaveniach IDE.
+
+[#intro-qtcreator]
+=== IDE, súbory a príkazový riadok
+
+Programy na tomto cvičení očakávajú parametre na príkazovom riadku
+a súbory v pracovnom adresári.
+
+* parametre príkazového riadka môžete nastaviť __po zvolení cieľa__
+  v nastavení:
+** CLion: V prepínači cieľov vyberte  __Edit Configurations...__ → vyberte cieľ → __Program arguments__.
+** QtCreator: __Projects__ → __Run__ → __Command line arguments__.
+* súbory spomenuté na tomto cvičení sa automaticky kopírujú na miesto,
+  kde by ich programy mali nájsť; ak chcete pridať vlastné alebo
+  si pozrieť výsledné súbory, pozrite sa v okne __Run__ na cestu
+  v nastavení __Working directory__, kde by tieto súbory mali vzniknúť
+
+[#readline]
+== Funkcia `readline()` ešte raz
+
+Z link:../seminar-06#úloha-2-readline[cvičenia 6] si možno spomeniete
+na funkciu `readLine()`, ktorá mala zo štandardného vstupu prečítať
+celý riadok a vrátiť ho. Potrebnú pamäť si funkcia alokovala sama.
+
+Túto funkciu máte v kostre úlohy prerobenú tak, aby načítavala
+vstup z konkrétneho súboru. Môžete ju použiť v úlohách `censor` a
+`filesort` napríklad takto:
+
+[source,c]
+----
+char *line;
+while ((line = readline(file)) != NULL) {
+    // do something with the line
+
+    free(line);
+}
+----
+
+[faicon=graduation-cap]
+TIP: Stručné vysvetlenie teórie k súborom a popis rozdielov medzi
+textovým a binárnym režimom otvárania súboru nájdete na
+link:#theory[konci tejto stránky].
+
+.Kde sú jednotkové testy?
+[CAUTION]
+====
+Výsledkom tohto cvičenia sú kompletné programy. Kostra programu síce obsahuje
+návrh na dekompozíciu programov, ale je v podstate na vás, či si funkcie
+premenujete alebo rozdelíte úplne inak. Preto toto cvičenie neobsahuje
+žiadne jednotkové testy.
+====
+
+[#task01]
+== Úloha 1: Cenzúra
+
+[faicon=crosshairs]
+NOTE: Prepnite cieľ na program `01-censor`.
+
+Napíšte program, ktorý dostane ako parameter reťazec a dva súbory:
+
+[source]
+----
+./censor STRING INPUT OUTPUT
+----
+
+Každý riadok zo súboru `INPUT` potom zapíše do súboru `OUTPUT` s tým,
+že každý výskyt reťazca `STRING` nahradí hviezdičkami.
+Pri implementácii môžete použiť funkciu `readline()`.
+
+Príklad vstupného súboru `c-original.txt`:
+
+[source]
+----
+C is the third letter of the Latin alphabet. After B, and before C++, C#, Cb
+and C-. C is also the big blue thing in which fish swim.
+----
+
+pričom po spustení programu takto:
+
+[source]
+----
+./censor C# c-original.txt c-censored.txt
+----
+
+bude obsah `c-censored.txt`
+
+[source]
+----
+C is the third letter of the Latin alphabet. After B, and before C++, **, Cb
+and C-. C is also the big blue thing in which fish swim.
+----
+
+TIP: Tip: `strstr()`.
+
+[#task02]
+== Úloha 2: Xor Cipher
+
+[faicon=crosshairs]
+NOTE: Prepnite cieľ na `02-cipher`.
+
+Napíšte program, ktorý vezme 3 parametre:
+
+[source]
+----
+./cipher KEY INPUT OUTPUT
+----
+
+Zo súboru `KEY` prečíta presne 512 bytový kľúč v binárnom režime.
+Potom otvorí súbor `INPUT` a pre každý 512 bytový blok, ktorý z neho prečíta,
+tento blok "zašifruje" operáciou `^` (xor) s kľúčom po bytoch. Výsledný
+blok zapíše do súboru `OUTPUT`.
+Dajte si pozor na to, že súbor nemusí mať veľkosť deliteľnu 512 a preto
+posledný načítaný blok môže byť menší.
+
+Na testovanie môžete využiť súbory `aperture.key` a `aperture.xor`.
+V tomto programe nepoužívajte `readline()`!
+
+TIP: Tip: `"rb"`, `fread()`, `fwrite()`.
+
+[#task03]
+== Úloha 3: File sort
+
+[faicon=crosshairs]
+NOTE: Prepnite cieľ IDE na `03-filesort`.
+
+V súbore `filesort.c` je pripravená kostra programu.
+Doplňte vyznačené časti tak, aby súbor po spustení očakával 2 argumenty:
+
+[source]
+----
+./filesort INPUT OUTPUT
+----
+
+Môžete predpokladať, že súbor `INPUT` obsahuje riadky tvaru
+
+[source]
+----
+NUMBER: TEXT
+----
+
+Vašou úlohou je dopísať kód, ktorý zoradí riadky podľa `NUMBER`
+a potom do výstupného súboru `OUTPUT` zapíše už len výsledný zoradený text.
+Môžete použiť funkciu `readline()` a implementáciu spájaného zoznamu
+z link:../seminar-07/[cvičenia 7], ktorá je už pripravená v kostre spolu
+s bonusovými funkciami `list_sort()` a `list_for_each()`.
+
+Ako ukážku vstupu môžete použiť súbor `gone.txt`.
+
+TIP: Tip: `strtok()` a použite pripravenú štruktúru `line_info` na uloženie
+načítaného reťazca, čísla riadka a textu.
+
+[#bonus01]
+== Bonus 1: Pakety
+
+[faicon=crosshairs]
+NOTE: Prepnite cieľ na `04-packets`.
+
+Napíšte program, ktorý otvorí súbor zadaný v jedinom parametri:
+
+[source]
+----
+./packets FILE
+----
+
+Súbor `FILE` sa otvorí v binárnom
+režime a program z neho prečíta štruktúry typu `struct packet`,
+ktorá je v kostre programu.
+
+[source,c]
+----
+struct packet
+{
+    uint16_t id;
+    uint16_t length;
+    char     data[28];
+};
+----
+
+Pre každú štruktúru program skontroluje, že `id` je poradové číslo
+prečítaného paketu. Prvý paket má číslo `0`. Potom vypíše na výstup
+toľko znakov z atribútu `data`, koľko je uložené v `length`.
+
+Všimnite si, že namiesto typov `short` alebo `int` používa štruktúra
+typy pevných veľkostí, aby boli súbory programu prenositeľnejšie.
+Pochopiteľne to nestačí, problémom môže byť napríklad endianita.
+
+Program môžete testovať na súbore `glados.bin`.
+Tu potichu predpokladáme, že cvičenia bežia na systémoch s __little endian__.
+
+[#bonus02]
+== Bonus 2: Funkcia `getline()`
+
+[faicon=crosshairs]
+NOTE: Prepnite cieľ na `05-getline`.
+
+Funkcia `readline()`, ktorú sme používali v prvých dvoch úlohách
+je rozhodne užitočná. Má však niekoľko nevýhod, ktoré možno bolo
+vidno už v prvej úlohe. Pamäť, ktorú si funkcia `readline()` alokuje,
+sa už totiž nedá znova funkcii predať a naplniť.
+
+To je trochu neefektívne pri spracovaní súboru po riadkoch, kedy pracujeme
+v režime __prečítaj riadok__ → __spracuj__ → __opakuj do konca súboru__,
+kde by sa zišlo využiť už alokovanú pamäť z predchádzajúcej iterácie.
+
+Štandard POSIX ponúka ako riešenie funkciu `getline()`, ktorá pamäť pre reťazec
+nielen alokuje, ale umožňuje využiť už alokovanú pamäť na načítanie ďalších
+riadkov. V štandarde jazyka C sa ale táto funkcia
+(link:https://en.cppreference.com/w/c/experimental/dynamic/getline[zatiaľ])
+bohužiaľ nenachádza, preto si ju implementujeme sami.
+
+Do súboru `getline.c` implementujte funkciu `getline()`:
+
+[source,c]
+----
+long getline(char **lineptr, size_t *n, FILE *stream);
+----
+
+ktorá pracuje podobne ako `readline()` s tým rozdielom, že
+
+* ak `*lineptr` je `NULL` a `*n` je `0`, potom funkcia alokuje
+  potrebnú pamäť podobne ako `readline()`, pričom jeho kapacitu
+  uloží do `*n` a pointer na reťazec do `*lineptr`
+* ak `*lineptr` ukazuje na pamäť veľkosti `*n`, potom funkcia novú pamäť
+  nealokuje, ale použije `*lineptr` a v prípade potreby pamäť akurát
+  zväčší
+* ostatné prípady, napr. `lineptr` je `NULL`, jedna z hodnôt je `NULL`
+  resp. `0` ukončia funkciu s chybovým návratovým kódom.
+
+Funkcia vrátiť počet znakov v reťazci **bez** koncovej nuly
+alebo `-1` ak došlo k chybe alebo funkcia bola zavolaná s neplatnými
+parametrami. Ukazateľ `*lineptr` potom ukazuje na načítaný reťazec
+a `*n` je veľkosť alokovanej pamäte (môže byť väčšia než dĺžka reťazca).
+
+NOTE: Štandard POSIX túto funkciu poskytuje s návratovým typom `ssize_t`,
+ktorý v C99 neexistuje. Tento typ je rovnaký ako `size_t`, ale podporuje
+aj záporné čísla.
+
+[#theory]
+== Pripomenutie z prednášky
+
+Funkcie na prácu so súbormi sa nachádzajú hlavne v hlavičke `stdio.h`.
+
+[source,c]
+----
+FILE *fopen(const char *path, const char *mode);
+----
+
+Funkcia `fopen` otvorí súbor zadaný cestou `PATH` v režime `MODE`.
+Režim sa popisuje reťazcom, pričom typicky si vystačíte s `"r"` (čítanie),
+`"w"` (zápis) a `"a"` (pridávanie na koniec).
+Ak potrebujete pracovať s binárnymi súbormi, mali by ste do reťazca
+taktiež pridať `b`, napr. `"rb"` (čítanie v binárnom režime).
+Ak sa otvorenie súboru podarí, vráti ukazateľ na štruktúru `FILE`, inak
+`NULL` a nastaví chybový kód do globálnej premennej `errno`.
+
+[source,c]
+----
+int fclose(FILE *handle);
+----
+
+Zatvorí súbor `handle`. Keďže súbor, podobne ako pamäť, je z pohľadu systému
+druh zdroja, musí program každý explicitne otvorený súbor pred svojim
+skončením zatvoriť.
+
+[source,c]
+----
+int   fgetc(FILE *stream);
+char *fgets(char *s, int size, FILE *stream);
+----
+
+Funkcie, ktoré zo súboru prečítajú znak resp. reťazec až do dĺžky `size`.
+
+[source,c]
+----
+int fprintf(FILE *stream, const char *format, ...);
+int fscanf(FILE *stream, const char *format, ...);
+----
+
+Podobné k `printf` a `scanf`, akurát pracujú so zadaným súborom `stream`.
+
+[source,c]
+----
+size_t fread(void *ptr, size_t size, size_t count, FILE *stream);
+size_t fwrite(const void *ptr, size_t size, size_t count, FILE *stream);
+----
+
+Prečíta resp. zapíše do súboru `stream` dáta z pamäti, na ktorú ukazuje
+`ptr`, a ktorá obsahuje `count` objektov veľkosti `size`.
+Dajú sa použiť napríklad na zápis štruktúr alebo polí.
+
+Tieto funkcie sa typicky používajú na prácu so súbormi otvorenými
+v binárnom režime.
+
+[source,c]
+----
+int feof(FILE *stream);
+int ferror(FILE *stream);
+----
+
+Predikáty, ktoré zisťujú, či sa súbor dočítal až na koniec resp. súbor
+je v chybnom stave.
+
+Pozor, `EOF` sa nastavuje až pri prvom pokuse čítať **za** koniec súboru.
+Tj. ak má súbor 4 znaky a prečítate 4 znaky, `feof(file)` ešte vráti `false`,
+až ďalší pokus o čítanie nastaví pre súbor `EOF`.
+
+[#theory-bin-vs-text-file]
+=== Binárny a textový súbor
+
+Na súbor sa môžeme zjednodušene pozerať ako na sekvenciu bytov.
+Bez ďalšieho popisu formátu takéto súbory typicky nazývame __binárne__.
+Ak sa však na súbor pozeráme ako na postupnosť 0 a viac _riadkov_, kde
+každý riadok pozostáva z 0 a viac _tlačiteľných znakov alebo medzier_
+ukončených `\n`, potom hovoríme o __textovom__ súbore.
+
+Definícia textového súboru sa môže líšiť medzi platformami alebo môže
+závisieť od kódovania. Napríklad na Windows je bežné, že posledný riadok
+textového súboru nemusí končiť znakom nového riadka, kým na Unixových systémoch
+sa na takýto súbor programátori dívajú podozrivo.
+
+Využitie textových súborov je zrejmé, tieto súbory dokáže čítať a upravovať
+aj bežný používateľ, za predpokladu, že rozumie jeho formátu.
+U binárnych súborov je to ťažšie, pretože napríklad čísla bývajú typicky
+uložené tak, ako boli v pamäti počítača. Takéto súbory je často nutné
+upravovať špecializovanými nástrojmi, ktoré poznajú ich formát.
+Napríklad kým textový súbor môže obsahovať 32bitové číslo zapísané takto:
+
+[source]
+----
+42
+----
+
+tj. tri znaky `'4'`, `'2'` a `'\n'`, binárny súbor s ekvivalentným
+obsahom v link:https://en.wikipedia.org/wiki/Endianness[little endian]
+by mohol byť
+
+[source]
+----
+*<NUL><NUL><NUL>
+----
+
+kde `<NUL>` je byte s hodnotou 0 a `*` je ASCII znak s hodnotou `42`.
+Binárne súbory ukladajú väčšinou dáta, ktoré nemá zmysel reprezentovať
+textom alebo by to bolo príliš zložité, napríklad obrázky, zvuk a video.
+
+[#theory-bin-vs-text-mode]
+=== Ako sa líši textový režim od binárneho?
+
+Záleží od platformy.
+
+Napríklad na Unixových systémoch riadky textových súborov končia typicky `\n`.
+Aby však bolo pohodlnejšie presúvanie súborov medzi inými platformami,
+niektoré systémy pri čítaní textového súboru s inými koncami riadkov
+(povedzme `\r\n`) tieto **môžu** nahradiť za `\n`, takže z pohľadu C sa konce
+riadkov tvária konzistentne. Príznak `b` toto chovanie vypína.
+
+Naopak implementácie štandardnej knižnice C na OS Windows **môžu** v textovom
+režime meniť pri zápise jedného `\n` za dvojicu znakov `\r\n`, pričom otvorenie
+súboru v binárnom režime takéto chovanie vypne.
+
+Inak sú tieto režimy v podstate zameniteľné, na binárnom súbore je možné volať
+`fprintf()` a na textovom `fread()`, aj keď nie vždy dávajú tieto operácie
+zmysel.

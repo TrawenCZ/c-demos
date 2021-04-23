@@ -1,0 +1,154 @@
+---
+title: "Cvičení 6: Dynamická alokace"
+layout: "seminar"
+authors:
+  - xstanko2
+publish: 1
+---
+
+:source-highlighter: prettify
+:source-language: c
+
+Na tomto cvičení si vyskúšate prácu s dynamickou alokáciou.
+
+Pri dynamickej alokácii dochádza k vytvoreniu objektu na *halde* a objekt 
+existuje dovtedy, kým nie je explicitne uvoľnený. Dôsledkom je, že o pamäť 
+alokovanú na halde sa musíte starať sami.
+
+Dynamická alokácia sa využíva najmä na implementáciu dynamických dátových 
+štruktúr, teda štruktúr, ktoré počas svojej životnosti menia ich veľkosť, 
+napríklad podľa počtu svojich prvkov. 
+Medzi tieto štruktúry napríklad patrí zásobník (stack), rad (queue), halda (heap), 
+stromy, alebo spojovaný zoznam (linked list).
+Dynamická alokácia na halde nám tiež umožňuje pracovať s veľkými časťami pamäte, 
+čo nám statická alokácia neumožňuje: veľkosť zásobníku je totiž zvyčajne o dosť 
+menšia ako veľkosť haldy.
+
+== Úloha 1: Základné funkcie
+
+Na minulom cvičení ste implementovali funkcie na jednoduchú prácu s reťazcami.
+Avšak vždy ste museli vypočítať veľkosť výstupného bufferu,
+ten ste museli funkcii predať a ona vám ho niečím naplnila.
+V tejto úlohe si tie funkcie trochu vylepšíte, zbavíte sa predávania výstupu
+ako parametra a budete ho vracať pomocou `return`.
+
+=== Zadanie úlohy 1
+V tejto úlohe si znova napíšete niektoré základné funkcie s použitím dynamickej
+alokácie.
+
+Pôjde o tieto funkcie:
+
+[source,c]
+----
+char *dyn_strcpy(const char *str);
+char *dyn_strjoin(const char *pre, const char *post);
+----
+
+* `dyn_strcpy` -- vráti kópiu reťazca, avšak nový reťazec sa bude nachádzať na halde
+* `dyn_strjoin` -- funkcia spojí dva reťazce do jedného
+
+
+V prípade, že vstupné argumenty sú `NULL`, funkcie vrátia `NULL` (v prípade nejasností si prezrite dodané testy).
+
+== Úloha 2: Vlastný readline
+
+Určite ste sa už stretli s tým, že ste potrebovali načítať zo štandardného vstupu
+alebo súboru celý riadok. Jazyk C na to má funkcie, ale tie nie sú dostatočne obratné.
+Preto si v tejto úlohe naimplementujete vlastnú funkciu, ktorá zo štandardného vstupu
+načíta celý riadok, bez toho, že by sme nejak obmedzovali veľkosť vstupu.
+
+=== Zadanie úlohy 2
+
+Naimplementujte funkciu `read_line`, ktorá načíta zo štandardného vstupu celý riadok.
+
+[source,c]
+----
+char *read_line(void);
+----
+
+Funkcia si na začiatku alokuje reťazec ľubovoľnej veľkosti.
+Následne načítava jednotlivé znaky, ktoré do reťazca pridáva.
+Pokiaľ by nasledujúci znak spôsobil pretečenie alokovaného reťazca,
+funkcia požiada o navýšenie pridelenej pamäte
+pre reťazec pomocou funkcie link:http://www.cplusplus.com/reference/cstdlib/realloc/[`realloc(3)`].
+Týmto spôsobom sa bude zvyšovať veľkosť, pokiaľ sa vám nepodarí úspešne načítať celý reťazec.
+Avšak pozor; to, koľko pamäte ste schopní alokovať záleží od množstva voľnej operačnej pamäte.
+Po načítaní detekcii konca riadku alebo `EOF`, funkcia vráti alokovaný reťazec.
+
+Pri práci s dynamicky alokovaný poľom alebo reťazcom, platia určité zásady.
+V momente, keď presiahnete maximálnu alokovanú veľkosť pri pridávaní prvkov na koniec poľa,
+žiadate o realokáciu.
+
+Je zvykom realokovať vždy o vhodný násobok aktuálnej veľkosti poľa (často dvojnásobok).
+**POZOR**, po volaní funkcie `realloc` nad nejakým poľom musíte vždy pracovať s ukazovateľom,
+ktorý vám vrátila táto funkcia a nie s tým, ktorý ste jej predali.
+Pri realokácií totiž mohlo dôjsť k premiestneniu dát na iné miesto v pamäti.
+
+Pri zlyhaní funkcie link:http://www.cplusplus.com/reference/cstdlib/realloc/[`realloc(3)`]
+alebo link:http://www.cplusplus.com/reference/cstdlib/malloc/[`malloc(3)`] dôjde k vráteniu
+hodnoty `NULL`.
+V taktom prípade by ste o tom mali užívateľa upozorniť a korektne na to zareagovať.
+K zlyhaniu zväčša dôjde v prípade, že vám operačný systém nemôže alebo nechce prideliť viac pamäte.
+
+
+== Úloha 3: Dynamická alokácia a dealokácia 2D poľa
+
+V tejto úlohe si implementujete funkciu na alokáciu a uvoľnenie nepravouhlého 2D poľa.
+
+
+[source,c]
+----
+void **dyn_alloc2d(size_t rows, size_t col_sizes[rows]);
+int dyn_free2d(void **memory, size_t rows);
+----
+
+Funkcia `dyn_alloc2d` vezme ako prvý vstupný argument počet riadkov 2D poľa.
+Druhým argumentom je pole obsahujúce veľkosti jednotlivých riadkov.
+Výstupom funkcie bude dynamicky alokované nepravouhlé 2 rozmerné pole.
+
+V prípade, že počet riadkov je 0 alebo `col_sizes` je `NULL`, funkcia vráti `NULL`.
+V prípade, že sa v `col_sizes` nachádza 0, ukazateľ pre riadok bude nastavený na `NULL`.
+V prípade, že alokácia zlyhala, funkcia vráti `NULL` a korektne uvoľní pamäť,
+ktorá už alokovaná bola.
+
+
+Hodnoty `col_sizes` udávajú veľkosť pamäte, s ktorou bude volaný `malloc`
+pre jednotlivé riadky. To znamená, že hodnota pozostáva už z veľkosti riadka,
+krát veľkosť typu.
+
+
+Funkcia `dyn_free2d` vezme ako prvý vstupný argument ukazovateľ na 2D pole,
+ktoré bolo alokované pomocou `dyn_alloc2d`, funkcia korektne uvoľní všetku alokovanú pamäť.
+
+V prípade, že počet riadkov je 0 alebo `memory` je `NULL`, funkcia vráti hodnotu `1`,
+inak ak všetko prebehlo v poriadku vráti hodnotu `0`.
+
+== Bonusy
+
+=== Bonus 1: Pascalov trojuholník danej hĺbky
+
+V tejto úlohe si implementujete funkciu, ktorá pre danú hĺbku vygeneruje Pascalov trojuholník.
+
+[source,c]
+----
+unsigned **pascal_triangle(size_t depth);
+----
+
+V prípade, že hĺbka je 0, funkcia vráti `NULL`.
+
+
+=== Bonus 2: Implementácia úloh z minulých cvičení
+
+Teraz keď už ste si vyskúšali dynamickú alokáciu, skúste si vybrať niektoré funkcie
+z minulých cvičení a skúsiť si ich prepísať pomocou dynamickej alokácie.
+
+Odporučil by som implementáciu funkcie `string_split`, táto funkcia sa vám bude ešte často krát hodiť.
+A pomocou nej napísať funkciu, ktorá vezme nejaký reťazec a nahradí v ňom všetky
+výskyty nejakého podreťazca iným podreťazcom.
+Obe funkcie sú implementované vo vzorovom riešení.
+
+== Zaujímavé odkazy
+
+* link:http://stackoverflow.com/questions/1119134/how-do-malloc-and-free-work[Ako fungujú malloc a free]
+* link:http://stackoverflow.com/questions/1825964/c-c-maximum-stack-size-of-program[Maximálna veľkosť zásobníka]
+* link:http://www.win.tue.nl/~aeb/linux/lk/lk-9.html#ss9.6[Overcommit and OOM]
