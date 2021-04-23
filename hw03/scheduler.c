@@ -22,7 +22,8 @@ priority_queue create_queue(void)
 
 bool copy_queue(priority_queue *dest, const priority_queue *source) 
 {
-    if (source == NULL || dest == NULL) return false;
+    assert(source != NULL);
+    assert(dest != NULL);
     dest->top = NULL;
     priority_queue_item *pSourceNode = source->top;
     priority_queue_item *pDestNode = NULL;
@@ -126,6 +127,7 @@ enum push_result push_to_queue(priority_queue *queue, process_type process)
 
 void pop_item(priority_queue *queue, priority_queue_item *item) 
 {
+    assert(queue != NULL);
     if (queue->top == item || queue->bottom == item) {
         if (queue->top == item && queue->bottom == item) {
             queue->top = NULL; queue->bottom = NULL;
@@ -147,13 +149,15 @@ void pop_item(priority_queue *queue, priority_queue_item *item)
 
 priority_queue_item* top_getter(const priority_queue *queue, uint16_t cpu_mask) 
 {
+    assert(queue != NULL);
     priority_queue_item *pNode = queue->top;
-    while (pNode != NULL && (cpu_mask & pNode->process.cpu_mask) != pNode->process.cpu_mask) {pNode = pNode->next;}
+    while (pNode != NULL && (cpu_mask & pNode->process.cpu_mask) == 0) {pNode = pNode->next;}
     return pNode;
 }
 
 process_type* get_top(const priority_queue *queue, uint16_t cpu_mask)
 {   
+    assert(queue != NULL);
     priority_queue_item *pNode = top_getter(queue, cpu_mask);
     if (pNode == NULL) return false;
     return &(pNode->process);
@@ -161,40 +165,43 @@ process_type* get_top(const priority_queue *queue, uint16_t cpu_mask)
 
 bool pop_top(priority_queue *queue, uint16_t cpu_mask, process_type *out) 
 {
+    assert(queue != NULL);
     priority_queue_item *top = top_getter(queue, cpu_mask);
     if (top == NULL || queue == NULL || queue->top == NULL) return false;
     if (out != NULL) memcpy(out, &(top->process), sizeof(process_type));
     pop_item(queue, top);
-    free(top); top = NULL;
+    free(top);
     return true;    
 }
 
 unsigned int run_top(priority_queue *queue, uint16_t cpu_mask, unsigned int run_time) 
 {
+    assert(queue != NULL);
     priority_queue_item *pNode = top_getter(queue, cpu_mask);
     if (pNode == NULL) return 0;
     unsigned int output = pNode->process.callback(run_time, pNode->process.context);
     if (output == 0) {
         pop_item(queue, pNode);
-        free(pNode); pNode = NULL;
+        free(pNode);
         return 0;
     }
     pNode->process.remaining_time = MAX((int) (pNode->process.remaining_time - run_time), 0) + output;
     process_type process = pNode->process;
-    pop_item(queue, pNode);
-    free(pNode); pNode = NULL;
+    pop_item(queue, pNode); free(pNode);
     push_to_queue(queue, process);
     return process.remaining_time;
 }
 
 bool renice(priority_queue *queue, cb_type callback, void *context, unsigned int niceness) 
 {
+    assert(queue != NULL);
+    assert(niceness >= 10 && niceness < 50);
     priority_queue_item *pNode = queue->top;
     while (pNode != NULL && (pNode->process.context != context || pNode->process.callback != callback)) {pNode = pNode->next; }
     if (pNode == NULL) return false;
     pNode->process.niceness = niceness;
     pop_item(queue, pNode);
     push_to_queue(queue, pNode->process);
-    free(pNode); pNode = NULL;
+    free(pNode);
     return true;
 }
