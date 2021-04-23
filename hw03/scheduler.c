@@ -104,6 +104,7 @@ enum push_result pusher(priority_queue *queue,
   if (queue->bottom == NULL)
     queue->bottom = pushNode;
   memcpy(&(pushNode->process), &process, sizeof(process_type));
+  queue->size += 1;
   return push_success;
 }
 
