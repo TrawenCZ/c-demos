@@ -22,21 +22,22 @@ priority_queue create_queue(void) {
 bool copy_queue(priority_queue *dest, const priority_queue *source) {
   assert(source != NULL);
   assert(dest != NULL);
-  dest->top = NULL;
+  priority_queue new_dest = create_queue();
+  new_dest.top = NULL;
   priority_queue_item *pSourceNode = source->top;
   priority_queue_item *pDestNode = NULL;
 
   while (pSourceNode != NULL) {
     priority_queue_item *pNewDestNode = malloc(sizeof(priority_queue_item));
     if (pNewDestNode == NULL) {
-      clear_queue(dest);
+      clear_queue(&new_dest);
       return false;
     }
-    if (dest->top == NULL) {
-      dest->top = pNewDestNode;
-    } else {
+    if (new_dest.top == NULL) {
+      new_dest.top = pNewDestNode;
+    } else {                            // pDestNode is not NULL
       pDestNode->next = pNewDestNode;
-    } // pDestNode is not NULL
+    }
     memcpy(&(pNewDestNode->process), &(pSourceNode->process),
            sizeof(process_type));
     pNewDestNode->prev = pDestNode;
@@ -45,6 +46,8 @@ bool copy_queue(priority_queue *dest, const priority_queue *source) {
   }
   if (pDestNode != NULL)
     pDestNode->next = NULL;
+
+  dest->top = new_dest.top;
   dest->bottom = pDestNode;
   dest->size = source->size;
   return true;
@@ -93,6 +96,7 @@ enum push_result pusher(priority_queue *queue,
   } else if (queue->top == pPushPosition) {
     pushNode->next = pPushPosition;
     queue->top = pushNode;
+    pushNode->prev = NULL;
     pPushPosition->prev = pushNode;
   } else {
     pushNode->next = pPushPosition;
@@ -151,8 +155,7 @@ enum push_result push_to_queue(priority_queue *queue, process_type process) {
     unsigned int sourcePriority =
         pPushPosition->process.niceness * pPushPosition->process.remaining_time;
     while (inputPriority == sourcePriority &&
-           bit_count(pPushPosition->process.cpu_mask) <
-               bit_count(process.cpu_mask)) {
+           bit_count(pPushPosition->process.cpu_mask) < bit_count(process.cpu_mask)) {
       pPushPosition = pPushPosition->next;
       if (pPushPosition == NULL)
         break;
