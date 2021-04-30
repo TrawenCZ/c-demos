@@ -1,0 +1,268 @@
+---
+title: "Cvičení 9: Rekurze"
+layout: "seminar"
+authors:
+  - "Jiří Weiser": "spito@muni.cz"
+publish: 1
+---
+
+V tomto cvičení si vyzkoušíte psát rekurzivní funkce a procvičíte si práci s ukazateli na funkce.
+V imperativním programování se většinou snažíme implicitní rekurzi vyhnout,
+protože velikost zásobníku bývá daleko menší než paměť,
+kterou je možné získat dynamickou alokací.
+V reálných programech je vhodné rekurzi přepsat do cyklu a použít explicitní zásobník.
+Je to sice více práce a kód bude složitější, ale nehrozí takové riziko přetečení zásobníku.
+V tomto cvičení až na poslední úkol budete používat běžné rekurzivní volání.
+
+== Úkol 1: Jednoduché rekurzivní funkce
+
+V rámci prvního úkolu budete implementovat tři jednoduché rekurzivní funkce,
+které prochází stromem a zjišťují nějaké informace. Řešení pište do souboru `playground.c`.
+
+=== Zadání úlohy 1
+
+Implementujte funkci `tree_sum`, která sečte hodnoty všech uzlů ve stromu.
+
+[source,c]
+----
+int tree_sum(const struct node *node);
+----
+
+Implementujte funkci `tree_size`, která spočítá počet uzlů ve stromě.
+
+[source,c]
+----
+int tree_size(const struct node *node);
+----
+
+Implementujte funkci `tree_max_value`, která zjistí nejvyšší hodnotu ve stromě.
+
+[source,c]
+----
+int tree_max_value(const struct node *node);
+----
+
+[NOTE]
+====
+Všechny tři funkce jsou si velice podobné. Pokud implementujete pořádně jednu funkci, zbývající dvě snadno vytvoříte z první funkce.
+====
+
+== Úkol 2: Agregované rekurzivní funkce
+
+Pokud jste úspěšně zvládli předchozí úkol, měli byste vidět výraznou
+podobnost funkcí `tree_sum` a `tree_size`. Konkrétně jediný rozdíl je v chápání zobrazení hodnoty uzlu na číslo.
+V případě funkce `tree_sum` se hodnota uzlu zobrazuje na sebe samu (tomu se říká identita).
+V případě funkce `tree_size` se každá hodnota uzlu zobrazuje vždy na hodnotu `1`.
+Obecně lze tedy výpočet funkcí `tree_sum` a `tree_size` sjednotit a
+zobrazení hodnoty uzlu na číslo se bude realizovat nějakou jinou funkcí (tzv. projekční funkcí),
+kterou obdržíme jako parametr.
+
+=== Zadání úlohy 2
+
+Implementujte obecnou agregační funkci pro binární strom `tree_aggregate`,
+která bude procházet strom a bude sčítat jednotlivá zobrazení hodnot uzlů.
+
+[source,c]
+----
+int tree_aggregate(const struct node *node, int (*projector)(int));
+----
+
+Pro výpočet velikosti stromu a součtu hodnot všech uzlů budete potřebovat
+následující projekční funkce:
+
+[source,c]
+----
+int projector_sum(int value)
+{
+    return value;
+}
+
+#define UNUSED(x) (void)(x)  // Hello old friend, ...
+
+int projector_size(int value)
+{
+    UNUSED(value);
+    return 1;
+}
+----
+
+[NOTE]
+====
+Použití makra `UNUSED` *nemá žádný efekt na vykonání kódu*, je zde
+pouze, aby si překladač nestěžoval a náš záměr byl čitelný.
+====
+
+Zkuste si napsat vhodné projekční funkce, které vám pomůžou zodpovědět následující otázky:
+
+- Kolik je ve stromě čísel, která jsou dělitelná třemi?
+- Je ve stromě více sudých, nebo lichých čísel?
+- Jaký je počet všech cifer hodnot uzlů ve stromě?
+
+== Úkol 3: Obecná rekurzivní funkce
+
+Funkce `tree_aggregate` umožňuje procházet strom nezávisle na zobrazení hodnot uzlů.
+Problém s touto funkcí ale je, že kombinuje hodnoty zobrazení pomocí sčítání,
+a není možné pomocí funkce `tree_aggregate` implementovat například funkci `tree_max_value`.
+Proto vytvořte obecnou rekurzivní funkci `tree_for_each`, která bude umožňovat provádět
+libovolné (pouze čtecí) operace nad hodnotami ve stromě.
+
+V případě funkce `tree_aggregate` jste měli nějakou zobrazovací funkci,
+což ale pro funkci `tree_for_each` nebude stačit.
+Nyní budete potřebovat zobrazovací funkci předat ještě nějaká data navíc,
+čímž se ze zobrazovací funkce stane operační funkce.
+Protože nelze dopředu určit jaký typ dat budou operační funkce potřebovat, použijte `void *`,
+který v každé operační funkci vhodně přetypujete.
+
+=== Zadání úkolu 3
+
+Implementujte obecnou rekurzivní funkci `tree_for_each`, která bude procházet strom a
+bude postupně volat funkci, která bude operovat s hodnotou uzlu a dodatečnými daty.
+
+[source,c]
+----
+void tree_for_each(const struct node *node, void (*operation)(int, void *), void *data_pack);
+----
+
+Pro výpočet součtu hodnot ve stromě by mohla funkce `operation_sum` a
+její použití vypadat nějak takto:
+
+[source,c]
+----
+void operation_sum(int value, void *data_pack)
+{
+    int *partial_result = (int *) data_pack;
+    *partial_result += value;
+}
+
+int get_tree_sum(const struct tree *tree)
+{
+    int result = 0;
+    if (tree && tree->root) {
+        tree_for_each(tree->root, &operation_sum, &result);
+    }
+    return result;
+}
+----
+
+Napište vhodné operační funkce, které vám pomohou zjistit následující věci:
+
+- Implementujte zjištění maximální a minimální hodnoty ve stromě. (Pozor na počáteční hodnoty.)
+- Zjistěte, kolik čísel ve stromě se nachází v intervalu `[a, b]`, kdy rozsah intervalu zadává uživatel.
+- Zjistěte, zda je z čísel ve stromě možné poskládat souvislou řadu po sobě jdoucích čísel.
+
+[NOTE]
+====
+Pokud chcete předávat operační funkci více věcí, je dobré
+si definovat nějakou strukturu, kterou vhodně naplníte. V operační funkci bude
+potřeba `data_pack` přetypovat na
+ukazatel na strukturu.
+====
+
+== Bonusy
+
+=== Úkol 4 (bonusový): Závorkový výpis stromu
+
+Jedna z možností jak zapsat strom do sekvenčního zápisu je závorkový zápis.
+Tento zápis lze s úspěchem použít nejen pro binární, ale taktéž pro `n`-ární stromy.
+Ze zápisu
+
+----
+( 4 ( 2 * ( 3 ) ) ( 6 ( 5 ) * ) )
+----
+
+by vznikl strom
+
+----
+      4
+    /   \
+  2       6
+   \     /
+    3   5
+----
+
+Znak hvězdy je použitý proto, aby bylo možné zjistit, který potomek uzlu je vynechaný.
+Akorát v případě, kdy uzel žádné potomky nemá, je zbytečné vypisovat dvě hvězdy.
+
+==== Zadání úkolu 4
+
+Vaším úkolem je implementovat funkci, která na výstup vypíše strom v závorkové notaci.  
+
+Aby věc nebyla jednoduchá, budete v tomto úkolu omezeni a budete muset použít explicitní zásobník.
+Funkce pro práci se zásobníkem máte připraveny v souborech `stack.h` a `stack.c`.
+Implementovaný zásobník umožňuje vkládat libovolná data, tj. pracuje s datovým typem `void *`.
+Pro implementaci výpisu tak budete muset i vhodně navrhnout strukturu,
+která bude popisovat rekurzivní procházení za použití explicitního zásobníku.
+
+Níže je uvedená kostra funkce, kterou můžete použít:
+
+[source,c]
+----
+void tree_output(const struct tree *tree, FILE *output)
+{
+    struct stack stack;
+    stack_init(&stack);
+
+    if (tree && tree->root) {
+        /* TODO allocate `init_frame` */
+
+        /* TODO set your custom structure */
+        // init_frame->node = tree->root;
+
+        // stack_push(&stack, init_frame);
+    }
+
+    putc('(', output);
+    while (!stack_empty(&stack)) {
+        /* TODO use stack_top(&stack) to get a `frame` */
+
+        if ( /* TODO have you finished the `frame`? */ 1) {
+
+            // TODO finish printing `frame`
+
+            //free(frame);
+            //stack_pop(&stack);
+            //continue;
+        }
+
+        /* TODO
+         *   - when starting set up new frame
+         *   - printing node
+         *   - to print left/right subtree push the left/right node on stack
+         */
+    }
+}
+----
+
+[NOTE]
+====
+Pokud budete chápat strom jako graf, je možné vnímat
+funkci `tree_output` jako upravený algoritmus DFS s modifikací, že z
+důvodu acykličnosti si není třeba pamatovat navštívené vrcholy grafu/uzly stromu.
+====
+
+== Teorie
+
+=== Rekurze -- Koncová rekurze
+Existuje forma rekurze zvaná jako **koncová rekurze**.
+Tato rekurze vypadá tak, že rekurzivní volání je poslední příkaz v dané funkci.
+Výhodou koncové rekurze je, že ji překladače při zapnuté optimalizaci umí (většinou)
+najít a nahradit za cyklus. Příklad takové rekurze může vypadat takto:
+
+[source,c]
+----
+long factorial(int n)
+{
+    if (n > 1) {
+        return n * factorial(n - 1);
+    }
+    return 1;
+}
+
+int arithmetic_sum(int start, int stop, int step)
+{
+    if (start > stop) {
+        return 0;
+    }
+    return start + arithmetic_sum(start + step, stop, step);
+}
+----

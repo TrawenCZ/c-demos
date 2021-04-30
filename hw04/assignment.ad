@@ -1,0 +1,477 @@
+---
+title: "HW04: INI file merger"
+layout: "homework"
+list-of-files: ["*.c", "*.h"]
+solution-path: /home/kontr/pb071/hw04/merge-ini
+publish: now
+deadline-early: 2021-05-06 24:00
+deadline-final: 2021-05-09 24:00
+authors:
+  - xweiser1
+  - xkrchna1
+---
+
+[#intro]
+== Představení úkolu
+
+Konfigurační soubory jsou textové soubory, které obsahují parametry nebo
+výchozí nastavení programů. Samozřejmě se takové používají i ve firmě, ve které
+pracujete. Firma ale používá vlastní formát konfiguračních souborů, který je
+rozšířením standardního formátu `INI` a ráda by přešla na standardní `INI`.
+
+Toto rozšíření zahrnuje možnost použít `.include`, který dané místo nahradí
+obsahem souboru, na který se odkazuje. Odstraněním tohoto rozšíření se pak
+spojí víc souborů do jednoho.
+
+[#assignment]
+== Zadání
+
+Vaším úkolem bude napsat program, který provede sloučení `INI` souborů s direktivou
+`.include` do jednoho výsledného souboru.
+
+```
+$ ./merge-ini [OPTIONS] INPUT_FILE OUTPUT_FILE
+```
+kde:
+
+  * `OPTIONS` jsou volitelné přepínače
+  * `INPUT_FILE` je cesta ke vstupnímu souboru
+  * `OUTPUT_FILE` je cesta k výstupnímu souboru. Pokud neexistuje, tak se
+  vytvoří a pokud už existuje, tak bude přepsán.
+  Obě cesty můžou být relativní, nebo absolutní.
+
+[#assignment-options]
+=== Specifikace přepínačů
+
+`-d N, --max-depth N`::
+Maximální hloubka zanoření direktiv `.include`. `N` musí být číslo.
+Nula znamená, že není povoleno vkládání souborů. Záporné číslo znamená bez omezení.
++
+V případě, že nastane větší úroveň zanoření než je `N`, dojde k chybě. Výchozí
+hodnota je `10`.
+
+`-g, --include-guard`::
+Každý soubor bude vložen jenom jedenkrát.
++
+Funguje obdobně jako ochrana vícenásobného zahrnutí hlaviček v jazyku C. Pokud
+bude soubor vkládán na více místech, tak se nevloží na každé takové místo, ale
+jenom na první z nich. Na všech dalších místech se nebude počítat do limitu
+maximální hloubky zanoření.
+
+`-r, --report-cycles`::
+Program bude detekovat cyklické závislosti. V případě takové detekce dojde k
+chybě i v případě, že byl specifikován přepínač `-g`.
+
+`-h, --help`::
+Program vypíše na standardní výstup krátkou zprávu, která informuje o
+možnostech spuštění programu a podporované přepínače (můžete se inspirovat
+např. hw02).
+
+Pokud program dostane přepínač, který není uveden výše (případně v bonusové
+části), program vypíše nápovědu (to samé, co vypíše přepínač `-h`), ale na
+**standardní chybový výstup** a skončí s nenulovým návratovým kódem.
+
+[#assignment-behavior]
+=== Chování programu
+
+Od programu se očekává, že bude nejprve načítat zdrojový soubor a až po úspěšné
+validaci zdrojových souborů dojde k zápisu do výstupního souboru. Pokud nastane
+chyba při načítání, žádný výstupní soubor nebude vygenerován.
+
+V případě, že dojde k chybě, očekává se, že program na standardní chybový výstup
+napíše vhodnou hlášku toho, co se pokazilo, uvolní korektně všechny alokované
+zdroje a skončí s nenulovým návratovým kódem.
+
+[#requirements]
+== Požadavky
+
+Níže naleznete popis formátu konfiguračních souborů a pravidla pro transformace.
+
+[#requirements-config]
+=== Formát konfiguračního souboru
+
+Konfigurační soubor se čte po řádcích a na každém řádku se může vyskytovat
+jedna z následujících možností:
+
+* prázdný řádek -- Takový řádek se ignoruje.
+* řádek obsahující pouze bílé znaky -- Takový řádek se ignoruje.
+* komentář -- První nebílý znak je `;` (středník). Takový řádek se ignoruje.
+* sekce -- První nebílý znak je `[` (otevírací hranatá závorka) a poslední
+  nebílý znak je `]` (uzavírací hranatá závorka). Mezi názvem sekce a závorkami
+  může být z obou stran různý (i nulový) počet bílých znaků.
+* dvojice klíč-hodnota -- Formát řádku je `klíč=hodnota`. Kolem klíče i kolem
+  hodnoty může být různý (i nulový) počet bílých znaků. Klíč nesmí být prázdný
+  řetězec, hodnota být prázdná může.
+* Povolené znaky pro sekci a pro klíč -- číslice, písmena, dále znaky `!`, `-`,
+  `.`, `:`, `?` a `_` (vykřičník, pomlčka, tečka, dvojtečka, otazník a podtržítko).
+* Nelze předpokládat maximální možnou délku u názvu sekce, klíče, ani hodnoty.
+
+Sekce může být prázdná, tedy nemusí obsahovat žádnou dvojici klíč-hodnota.
+Dále pro konfigurační soubor platí, že každá dvojice klíč-hodnota musí příslušet
+nějaké sekci, tedy název sekce musí být na některém z předchozích řádků.
+
+Po načtení celého konfiguračního souboru musí platit:
+
+* Sekce může být v souboru uvedena nejvýše jednou.
+* Klíč může být v rámci jedné sekce uvedený nejvýše jednou.
+* Záleží na implementaci, zda tuto kontrolu aplikuje během načítání, nebo až v
+  rámci kontroly po načtení celého vstupního souboru.
+
+[#example-basic]
+==== Příklady konfiguračních souborů:
+
+.valid-1.ini
+[source]
+------------------------------------------
+[  Mysql-Database    ]
+dbHost =    127.0.1.1
+dbPort = 3306
+dbUser = user
+dbPassword = nepre!omiteln3Hesl0?:D
+[mail-server]
+; dalsi radek je prazdny
+
+[ssh:Hosts]
+publicKeysLocation =   .ssh/autorized_keys
+[ftp_config]
+[texts]
+label = velmi dulezity popisek
+help=
+equals==
+------------------------------------------
+
+.invalid-1.ini
+[source]
+----------------------------
+dbHost = 127.0.1.1
+;klic-hodnota nejsou v sekci
+[MysqlDatabase]
+----------------------------
+
+.invalid-2.ini
+[source]
+----
+[ssh:hosts][ftp_config]
+;vice sekci na radku
+publicKeys = .ssh/autorized_keys
+----
+
+[#requirements-include]
+=== Direktiva `.include`
+
+Direktiva `.include file.ini` specifikuje, že na dané místo se má vložit obsah
+souboru `file.ini`.
+Podrobnější pravidla:
+
+* Formát řádku je `.include cesta/k/souboru.ini` (s tečkou na začátku).
+* Soubor musí mít koncovku `.ini`.
+* Soubor splňuje požadavky <<requirements-config,konfiguračního souboru>>.
+* Cesta k souboru musí být relativní.
+  ** Pro naše účely je cesta absolutní v případě, že začíná lomítkem (i
+     zpětným), vlnkou, nebo obsahuje podřetězec `:/` či `:\`.
+  ** Cesta navazuje na relativní cestu aktuálního souboru.
+  ** Cesta nesmí vystoupit v adresářové struktuře nad kořenový soubor
+* Na místo direktivy se vloží obsah souboru takovým způsobem, že každá sekce,
+  která se v něm vyskytuje, bude obsahovat prefix tvořený z cesty souboru.
+
+[#requirements-include-prefix]
+==== Tvorba prefixu
+
+Pro tvorbu prefixu sekcí platí tato pravidla:
+
+* Prefix je složen z relativní cesty vloženého souboru následovaného znakem
+  `:` (dvojtečka).
+* Prefix se bere z normalizované cesty.
+** Složky s názvem `.` a `..` jsou eliminovány.
+** Vícenásobná lomítka (i zpětná) jsou spojena do jednoho.
+** Následně jsou nahrazena znakem `:`.
+** Znaky, které se vyskytnou v cestě a odporují pravidlům pro povolené znaky v
+   sekci, jsou nahrazeny znakem `?` (otazník).
+** Přípona `.ini` je odstraněna.
+
+[TIP]
+====
+Cesta `baz/../foo/././bar.ini` se normalizuje na `foo/bar.ini`.
+====
+
+[WARNING]
+====
+Cestu normalizujte až pro vytvoření prefixu.
+Řádka `.include non-existent-directory/../existing-file.ini` musí vést k chybě,
+že nelze otevřít takový soubor.
+====
+
+[#example-include]
+==== Příklad
+
+```
+$ ./merge-ini dir/base.ini result.ini
+```
+
+.dir/base.ini
+[source]
+----
+[section]
+key = value
+
+.include ./conn/db.ini
+----
+
+.dir/conn/db.ini
+[source]
+----
+[credentials]
+host = 127.0.0.1
+user = root
+pass = root
+----
+
+.result.ini
+[source]
+----
+[section]
+key = value
+
+[conn:db:credentials]
+host = 127.0.0.1
+user = root
+pass = root
+----
+
+[#requirements-output]
+=== Vlastnosti výstupního souboru
+
+Pro výstupní soubor platí tato pravidla:
+
+* Jedná se o validní `INI` soubor dle požadavků na
+  <<requirements-config,vstupní soubor>>.
+* Veškeré direktivy `.include` jsou <<requirements-include,nahrazeny>> obsahem
+  odkazovaných souborů.
+  ** Veškeré takto přidané sekce mají
+  <<requirements-include-prefix,transformovaný>> název.
+* Pořadí jednotlivých sekcí je irelevantní.
+* Pořadí dvojic `klíč-hodnota` v rámci sekcí je irelevantní.
+
+[#requirements-cycle-detection]
+=== Detekce cyklických závislostí
+
+Pokud soubor `alpha.ini` vkládá soubor `bravo.ini`, ten vkládá `charlie.ini`
+a tak dále a soubor `zulu.ini` vkládá opět `alpha.ini`, mluvíme o cyklické
+závislosti. Pro zapnutí detekce slouží <<assignment-options,přepínač>> `-r`,
+nebo jeho delší varianta `--report-cycles`.
+
+Zapnutá detekce cyklů musí fungovat i v případě, že je zapnutý
+<<assignment-options,přepínač>> `-g`, nebo jeho delší varianta `--include-guard`.
+
+[#example-cycle]
+==== Příklad
+
+```
+$ ./merge-ini -r -g alpha.ini result.ini
+Error: include cycle detected (13)
+        charlie.ini:3
+
+$ ./merge-ini -g alpha.ini result.ini
+```
+
+.alpha.ini
+[source]
+--------------------------
+[alpha]
+akey = avalue
+.include bravo.ini
+--------------------------
+
+.bravo.ini
+[source]
+--------------------------
+.include charlie.ini
+[ bravo ]
+bkey =  bvalue
+--------------------------
+
+.charlie.ini
+[source]
+--------------------------
+[charlie]
+ckey = cvalue
+.include alpha.ini
+--------------------------
+
+[#bonus]
+== Bonusové rozšíření (2b)
+
+Program nad rámec definovaných <<assignment-options,přepínačů>> akceptuje
+
+`-c, --with-comments`::
+Program do výsledného souboru zahrne také komentáře, prázdné řádky a řádky
+obsahující pouze bílé znaky ze vstupních souborů. Pro zjednodušení budeme i
+prázdné a bílé řádky označovat za komentáře.
++
+Komentář se může buď vázat k sekci či ke dvojci klíč-hodnota, nebo být volný.
+Komentář se váže k prvnímu nekomentářovému řádku, který má pod sebou. Pouze
+komentáře na konci souboru jsou volné. V případě, že byl soubor připojený pomocí
+direktivy `.include`, pak se volný komentář pokusí navázat na první
+nekomentářový řádek, který následuje ve zdrojových souborech.
+
+[#example-bonus]
+=== Příklad
+
+```
+$ ./merge-ini -c base.ini result.ini
+```
+
+.base.ini
+[source]
+----
+; comment in base
+.include sub.ini
+[section]
+
+; comment of key
+key = value
+----
+
+.sub.ini
+[source]
+----
+; comment in sub
+----
+
+.result.ini
+[source]
+----
+; comment in base
+; comment in sub
+[section]
+
+; comment of key
+key = value
+----
+
+[#notes]
+== Poznámky
+
+[#notes-solution]
+=== Vzorová implementace
+
+Vzorovou implementaci najdete na Aise: `{{page.solution-path}}`. Pro účely
+testování vašich řešení v Kontru akceptuje navíc přepínač `--diff`, po jehož
+zapnutí program porovná mezi sebou dva `INI` soubory.  Tento mód můžete využívat
+pro testování vašich implementací.
+
+Vzorová implementace zpracovává argumenty pomocí funkce `getopt_long`, jejíž
+vlastností je, že akceptuje „nedopsané“ dlouhé přepínače, pokud shledá jejich
+význam jednoznačným. Vzorovému řešení tak stační přepínač `--i` namísto celého
+`--include-guard`. Toto chování nebude testováno, vaše řešení mohou odmítnout
+takto zkrácené přepínače bez bodové ztráty.
+
+Vzorová implementace navíc nad rámec zadání akceptuje speciální název souboru
+`-`, který pro vstupní soubor znamená, že se čte ze standardního vstupu, a pro
+výstupní soubor znamená, že se zapisuje na standardní výstup. V případě
+zapnutého módu `--diff` lze použít `-` pouze pro druhý soubor.
+
+[TIP]
+====
+Je tak možné pustit na Aise příkaz
+
+----
+{{page.solution-path}} - - | {{page.solution-path}} --diff path/to/result.ini -
+----
+
+Třeba se vám to bude hodit při testování.
+====
+
+[#notes-testing]
+=== Testování
+K dispozici také dostanete několik souborů pro ulehčení práce.
+
+* V souboru `view.h` naleznete funkce pro jednodušší práci s textem. Fungují na
+  principu views, které můžete znát například z databází. Pomocí těchto funkcí
+  si můžete z řetězce vytvořit view a to následně porovnávat, aplikovat
+  predikáty na jeho části, vytvářet upravená view z původních podle různých
+  podmínek, atd.
+
+* V souboru `view.c` jsou příklady unit testů pro zmíněné funkce. Funkcionalita
+  testů je naimplementována v souboru `cut.h`. Tuto funkcionalitu můžete použít
+  (podle `view.c`) a vytvořit si tak vlastní unit testy.  Pro spuštění testů
+  bude stačit, když jako první include do souborů s testy přidáte `#include
+  "cut.h"`, případně upravíte `CMakeLists.txt`, poté pomocí CMake soubory
+  zkompilujete a spustíte `runner`.  `runner` si již testy sám „najde a spustí“.
+
+* Při testování pomocí dodaných souborů můžete využít makro `ASSERT(condition)`,
+  které skončí běh, pokud podmínka není splněna a makro `CHECK(condition)`,
+  které při nesplněné podmínce běh nezastaví, jen zahlásí chybu. Pro více
+  informací navštivte https://github.com/spito/testing.
+
+Tyto soubory můžete ignorovat, ale doporučujeme si je alespoň prohlédnout a
+nabrat z nich inspiraci, neboť vám mohou na chvíli zpříjemnit život.
+
+Nádavkem lze uvést, že samotná funkcionalita vzorového řešení je testována
+pomocí unit testů přibližně takto:
+
+.ini.c
+[source,c]
+----------------------
+#include "cut.h"
+#include "ini_parser.h"
+
+#ifndef TEST_SOURCE_DIR
+#define TEST_SOURCE_DIR "."
+#endif
+
+TEST(ini_basic)
+{
+    // nastavení přepínačů, deklarace proměnných atd...
+
+    rc = ini_read_file(&config, TEST_SOURCE_DIR "/ini_files/basic.ini", &options);
+    ASSERT(rc == INI_RC_OK);
+
+    // kontrola, že uvedené sekce a klíče obsahují předdefinované hodnoty
+    const char *triplets[][3] = {
+        {"section1", "key1", "value11"},
+        {"section2", "key1", "value21"}
+    };
+
+    REPEATED_SUBTEST("", sizeof(triplets)/sizeof(*triplets)) {
+        const int i = SUBTEST_NO - 1;
+        check_equality(triplets[i], &config);
+    }
+    ini_destroy(&config);
+}
+
+TEST(ini_comments)
+{
+    // nastavení přepínačů, deklarace proměnných atd...
+
+    rc = ini_read_file(&config, path, &options);
+    ASSERT(rc == INI_RC_OK);
+
+    rc = ini_write_file(&config, output_path, &options);
+    CHECK(rc == INI_RC_OK);
+
+    if (rc != INI_RC_CANNOT_WRITE_DATA)
+        remove_file = 1;
+
+    FILE *f = fopen(output_path, "r");
+    if (f) {
+        const char *content =
+"; comment 1\n"
+"[section]\n"
+"; comment 2\n"
+"key = value\n"
+"; comment 3\n"
+"; comment 4\n"
+"; comment sub 1\n"
+"[sub:comment:comment]\n"
+"; comment sub 2\n";
+        CHECK_FILE(f, content);
+        fclose(f);
+    }
+
+    if (remove_file)
+        remove(output_path);
+
+    ini_destroy(&config);
+}
+----------------------
