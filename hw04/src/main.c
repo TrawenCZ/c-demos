@@ -10,20 +10,20 @@
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
 
-typedef struct file_path 
+typedef struct linked_list_item 
 {
-    char *path_to_file;
-    struct file_path *next;
+    char *name;
+    struct linked_list_item *next;
+} linked_list_item;
+
+typedef struct linked_list 
+{
+    linked_list_item *top;
+    linked_list_item *bottom;
     int size;
-} file_path;
+} linked_list;
 
-typedef struct used_paths {
-    file_path *top;
-    file_path *bottom;
-    int depth;
-} used_paths;
-
-static void usage(const char *program)
+static void usage(FILE *output, const char *program)
 {
     const char *help =
             "Usage: %s OPTIONS\n"
@@ -36,10 +36,10 @@ static void usage(const char *program)
             "\t-r\t--report-cycles\t\tPrint loaded sudoku in ASCII grid\n"
             "\n";
 
-    printf(help, program, program);
+    fprintf(output, help, program, program);
 }
 
-void ignore_line(input) 
+void ignore_line(FILE *input) 
 {
     char loaded;
     while ((loaded = fgetc(input)) != EOF && loaded != '\n') {
@@ -50,56 +50,82 @@ void ignore_line(input)
 bool sectionize(FILE *input, FILE *output, char *prefix) 
 {
     char loaded;
+    char *err_msg = "Section not in correct format!\n";
     fprintf(output, "[%s", prefix);
     while ((loaded = fgetc(input)) != EOF && loaded != '\n' && loaded != ']') {
         if (isspace(loaded)) continue;
         if (strchr(ALLOWED_CHARS, loaded) == NULL) return false;
         fprintf(output, "%c", loaded);
     }
+    if (loaded != ']') {
+        fprintf(stderr, "%s", err_msg);
+        return false;
+    }
+    while ((loaded = fgetc(input)) != EOF && loaded != '\n') {
+        if (isspace(loaded)) continue;
+        fprintf(stderr, "%s", err_msg);
+        return false;
+    }
     fprintf(output, "]\n");
     return true;
 }
 
-bool key_bind(input, output) 
-{
-
+bool key_bind(FILE *input, FILE *output) 
+{   
+    char loaded;
+    while ((loaded = fgetc(input)) != '=') {
+        if (isspace(loaded)) continue;
+        if (strchr(ALLOWED_CHARS, loaded) == NULL) {
+            fprintf(stderr, "Key characters not in allowed range! Allowed characters: %s\n", ALLOWED_CHARS);
+            return false;
+        }
+        fprintf(output, "%c", loaded);
+    }
+    fprintf(output, " = ");
+    int loaded_long;
+    while ((loaded_long = fgetc(input)) != EOF && loaded_long != '\n') {
+        fprintf(output, "%c", loaded_long);
+    }
+    fprintf(output, "\n");
+    return true;
 }
 
-bool add_to_paths(file_path *new_path, used_paths *paths) 
+bool add_to_paths(linked_list_item *new_path, linked_list *paths) 
 {
     if (paths->top == NULL) {
         paths->top = new_path;
         paths->bottom = new_path;
     } else {
-        file_path *pPath = paths->top;
+        linked_list_item *pPath = paths->top;
         while (pPath != NULL) {
-            if (pPath->path_to_file == new_path->path_to_file) return false;
+            if (pPath->name == new_path->name) return false;
             pPath = pPath->next;
         }
-        path->next = NULL;
+        new_path->next = NULL;
         paths->bottom->next = new_path;
         paths->bottom = new_path;
     }
+    paths->size++;
     return true;
 }
 
-bool reallocate(file_path *new_path, int *size_limit)
+bool reallocate(linked_list_item *new_path, int *size_limit)
 {
     *size_limit += 255;
-    void *holder = realloc(new_path->path_to_file, sizeof(char)*(*size_limit))
+    void *holder = realloc(new_path->name, sizeof(char)*(*size_limit));
     if (holder == NULL) {
         fprintf(stderr, "Could not allocate enough memory.\n");
         return false;
     }
-    free(new_path->path_to_file);
-    new_path->path_to_file = holder;
+    free(new_path->name);
+    new_path->name = holder;
     return true;
 }
 
-bool is_include(FILE* input, file_path *new_path) 
+bool is_include(FILE* input, linked_list_item *new_path) 
 {
     char *pattern = "include ";
-    for (int i = 0; i < strlen(pattern); i++0) {
+    for (int i = 0; i < (int) strlen(pattern); i++) {
         if (fgetc(input) != pattern[i]) return false;
     }
     char loaded;
@@ -110,57 +136,122 @@ bool is_include(FILE* input, file_path *new_path)
         if (size_counter > size_limit) {
             if (!reallocate(new_path, &size_limit)) return false;
         }
-        new_path->path_to_file[size_counter-1] = loaded;
+        new_path->name[size_counter-1] = loaded;
     }
-    new_path->path_to_file[size_counter] = '\0';
+    new_path->name[size_counter] = '\0';
+    return true;
+}
+
+int to_prefix(char* path, linked_list_item *new_prefix)
+{
+    int size_counter = 0;
+    int size_limit = 254;
+    int depth_counter = 0;
+    bool previous_is_slash = false;
+    for (int i = 0; i < (int) strlen(path); i++) {
+        if (path[i] == '/' || path[i] == '\\') {
+            if (previous_is_slash) continue;
+            depth_counter++;
+            new_prefix->name[size_counter] = ':';
+            size_counter++;
+            previous_is_slash = true;
+        } else if (path[i] == '.') {
+            depth_counter--;
+            continue;
+        } else if (strchr(ALLOWED_CHARS, path[i]) != NULL) {
+            previous_is_slash = false;
+            new_prefix->name[size_counter] = path[i];
+            size_counter++;
+        } else {
+            new_prefix->name[size_counter] = '?';
+            size_counter++;
+        }
+        if (size_counter == size_limit) {
+            if (!reallocate(new_prefix, &size_limit)) return 0;
+        }
+    }
+    new_prefix->name[size_counter-3] = '\0';
+    return depth_counter;
+}
+
+bool is_valid_path(linked_list_item *new_path)
+{
+    if (strcmp(new_path->name[(int) strlen(new_path->name) - 4], ".ini") != 0) {
+        fprintf(stderr, "File in .include is not a valid .ini file!\n");
+        return false;
+    } else if (new_path->name[0] == '/' || new_path->name[0] == '\\' || new_path->name[0] == '~' ||
+               strstr(new_path->name, ":\\") != NULL || strstr(new_path->name, ":/") != NULL) {
+                   fprintf(stderr, "Path in .include is not a valid relative path!\n");
+                   return false;
+               }
     return true;
 }
 
 
 
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_depth, char *prefix, used_paths used_files) 
+bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_depth, int curr_file_depth, char *prefix, linked_list *used_files) 
 {
     char loaded;
+    bool section_is_set = false;
     while ((loaded = fgetc(input)) != EOF) {
         if (isspace(loaded) || loaded == '\n') continue;
         if (loaded == ';') {ignore_line(input); continue; }
         if (loaded == '[') {
             if (!sectionize(input, output, prefix)) return false;
+            section_is_set = true;
             continue;
         }
         if (loaded == '.') {
-            file_path *new_path;
-            new_path->path_to_file = malloc(sizeof(char)*255);
-            if (!is_include(input, new_path) || used_files->depth > max_depth) {
+            linked_list_item *new_path = malloc(sizeof(linked_list_item));
+            new_path->name = malloc(sizeof(char)*255);
+
+            if (!is_include(input, new_path) || used_files->size > max_depth) {
                 return false;
             }
-            if (!add_to_paths(new_path, used_files) && (guard || report_cycles) {
-                fprintf(stderr, "Cycle in files detected!\n")
+            if (!add_to_paths(new_path, used_files) && (guard || report_cycles)) {
+                fprintf(stderr, "Cycle in files detected!\n");
                 return false;
-            }
-            FILE* new_input = fopen(buffer, "r");
+            } else if (!is_valid_path(new_path)) return false;
+
+            FILE* new_input = fopen(new_path->name, "r");
             if (new_input == NULL) {
-                fprintf(stderr, "Invalid input path after .include in file.\n");
+                fprintf(stderr, "Cannot open file at path after '.include' statement in file.\n");
                 return false;
             }
-            if (!convert(new_input, output, guard, report_cycles, max_depth, to_prefix(new_path->path_to_file), used_files)) {
+            linked_list_item *new_prefix = malloc(sizeof(linked_list_item));
+            new_prefix->name = malloc(sizeof(char)*255);
+            int depth_movement = to_prefix(new_path->name, new_prefix);
+            if (curr_file_depth + depth_movement < 0) {
+                fprintf(stderr, "Cannot go higher in filesystem than the level on which has program been launched.\n");
                 return false;
             }
+            if (!convert(new_input, output, guard, report_cycles, max_depth, curr_file_depth + depth_movement, new_prefix->name, used_files)) {
+                free(new_prefix->name);
+                free(new_prefix);
+                return false;
+            }
+            free(new_prefix->name);
+            free(new_prefix);
         }
         if (strchr(ALLOWED_CHARS, loaded) != NULL) {
+            if (!section_is_set) {
+                fprintf(stderr, "Section is not set for some keys!\n");
+                return false;
+            }
+            fprintf(output, "%c", loaded);
             if (!key_bind(input, output)) return false;
             continue;
         } else return false;
     }
+    return true;
 }
-
 
 
 int main(int argc, char **argv)
 {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
-            usage(argv[0]);
+            usage(stdout, argv[0]);
             return EXIT_SUCCESS;
         }
     }
@@ -190,6 +281,10 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--report-cycles") == 0 || strcmp(argv[i], "-r") == 0) {
             change = true;
             report_cycles = true;
+        } else if (argv[i][0] == '-') {
+            fprintf(stderr, "Ivalid operator in function arguments!\n");
+            usage(stderr, argv[0]);
+            return EXIT_FAILURE;
         }
         i++;
     }
@@ -204,7 +299,7 @@ int main(int argc, char **argv)
     if (input == NULL) {
         fprintf(stderr, "Invalid input path given. %s", help_msg);
         return EXIT_FAILURE;
-    } else if (output == NULL || strchr(argv[i], ".ini") == NULL) {
+    } else if (output == NULL || strcmp(argv[(int) strlen(argv[i]) - 4], ".ini") != 0) {
         fprintf(stderr, "Invalid output path given. %s", help_msg);
         return EXIT_FAILURE;
     }
@@ -212,11 +307,17 @@ int main(int argc, char **argv)
     if (max_depth < 0) {
         max_depth = INT_MAX;
     }
-    used_paths *used_files;
-    used_files->depth = 0;
-    if (convert(input, output, guard, report_cycles, max_depth, "\0")) {
+    linked_list *used_files = malloc(sizeof(linked_list));
+    linked_list *prefixes = malloc(sizeof(linked_list));
+    used_files->size = 0;
+    prefixes->size = 0;
+    if (convert(input, output, guard, report_cycles, max_depth, 0, "", used_files)) {
         return EXIT_SUCCESS;
     }
+
+    fclose(input);
+    fclose(output);
+
     return EXIT_FAILURE;
 
 }
