@@ -25,7 +25,7 @@ typedef struct linked_list
 } linked_list;
 
 
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_depth, 
+bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool comments_and_empty_lines, int max_depth, 
              int curr_file_depth, char *prefix, linked_list *sections, linked_list *used_files);
 
 static void usage(FILE *output, const char *program)
@@ -123,9 +123,12 @@ bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections)
     char *err_msg = "Section not in correct format!\n";
     char *mmr_msg = "Could not allocate enought memory for one of the sections!";
     fprintf(output, "[%s", prefix);
-    while ((loaded = fgetc(input)) != EOF && loaded != '\n' && loaded != ']') {
+    while ((loaded = fgetc(input)) != ']') {
         if (isspace(loaded)) continue;
-        if (strchr(ALLOWED_CHARS, loaded) == NULL) return false;
+        if (strchr(ALLOWED_CHARS, loaded) == NULL) {
+            fprintf(stderr, "Unallowed characters in section name! Allowed characters: %s\n", ALLOWED_CHARS);
+            return false;
+        }
         if (size_counter == size_limit) {
             if (!reallocate(new_section, &size_limit)) {
                 fprintf(stderr, "%s\n", mmr_msg);
@@ -167,6 +170,8 @@ bool key_bind(FILE *input, FILE *output, linked_list *keys, char first_char)
         if (isspace(loaded)) continue;
         if (strchr(ALLOWED_CHARS, loaded) == NULL) {
             fprintf(stderr, "Key characters not in allowed range! Allowed characters: %s\n", ALLOWED_CHARS);
+            free(new_key->name);
+            free(new_key);
             return false;
         }
         if (size_counter == size_limit) {
@@ -260,7 +265,7 @@ bool is_valid_path(linked_list_item *new_path)
     return true;
 }
 
-bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles, int max_depth,
+bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, int max_depth,
                        int curr_file_depth, linked_list *sections, linked_list *used_files)
 {
     linked_list_item *new_path = malloc(sizeof(linked_list_item));
@@ -304,7 +309,7 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
         fclose(new_input);
         return false;
     }
-    if (!convert(new_input, output, guard, report_cycles, max_depth, curr_file_depth + new_prefix->path_movement_for_files, new_prefix->name, sections, used_files)) {
+    if (!convert(new_input, output, guard, report_cycles, with_comments, max_depth, curr_file_depth + new_prefix->path_movement_for_files, new_prefix->name, sections, used_files)) {
         fclose(new_input);
         return false;
     }
@@ -312,9 +317,17 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     return true;
 }
 
+void copy_line(FILE* input, FILE* output) 
+{
+    int loaded;
+    fprintf(output, ";");
+    while ((loaded = fgetc(input)) != '\n' && loaded != EOF) {
+        fprintf(output, "%c", loaded);
+    }
+    fprintf(output, "\n");
+}
 
-
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_depth, 
+bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, int max_depth, 
              int curr_file_depth, char *prefix, linked_list *sections, linked_list *used_files) 
 {
     linked_list *keys = malloc(sizeof(linked_list));
@@ -322,11 +335,23 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_
     char loaded;
     bool section_is_set = false;
     while ((loaded = fgetc(input)) != EOF) {
-        if (isspace(loaded) || loaded == '\n') continue;
-        if (loaded == ';') {ignore_line(input); continue; }
+        if (loaded == '\n') {
+            if (with_comments) fprintf(output, "\n");
+            continue;
+        }
+        if (isspace(loaded)) continue;
+        
+        if (loaded == ';') {
+            if (with_comments) {
+                copy_line(input, output);
+            } else ignore_line(input);
+            continue;
+        }
         if (loaded == '[') {
-
-            if (!sectionize(input, output, prefix, sections)) return false;
+            if (!sectionize(input, output, prefix, sections)) {
+                clear(keys);
+                return false;
+            }
             section_is_set = true;
             clear(keys);
             keys = malloc(sizeof(linked_list));
@@ -334,7 +359,7 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_
             continue;
         }
         if (loaded == '.') {
-            if (!include_processer(input, output, guard, report_cycles, max_depth, curr_file_depth, sections, used_files)) {
+            if (!include_processer(input, output, guard, report_cycles, with_comments, max_depth, curr_file_depth, sections, used_files)) {
                 clear(keys);
                 return false;
             }
@@ -344,16 +369,22 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, int max_
         if (strchr(ALLOWED_CHARS, loaded) != NULL) {
             if (!section_is_set) {
                 fprintf(stderr, "Section is not set for some keys!\n");
+                clear(keys);
                 return false;
             }
             fprintf(output, "%c", loaded);
-            if (!key_bind(input, output, keys, loaded)) return false;
+            if (!key_bind(input, output, keys, loaded)) {
+                clear(keys);
+                return false;
+            }
             continue;
         } else {
             fprintf(stderr, "Unsupported key values! Supported key values: %s\n", ALLOWED_CHARS);
+            clear(keys);
             return false;
         }
     }
+    clear(keys);
     return true;
 }
 
@@ -399,7 +430,7 @@ int main(int argc, char **argv)
 
     char *help_msg = "Try --help for more information.\n";
     int i = 1;
-    bool change = true, guard = false, report_cycles = false;
+    bool change = true, guard = false, report_cycles = false, with_comments = false;
     int max_depth = 10;
     
 
@@ -422,6 +453,9 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--report-cycles") == 0 || strcmp(argv[i], "-r") == 0) {
             change = true;
             report_cycles = true;
+        } else if (strcmp(argv[i], "--with-comments") == 0 || strcmp(argv[i], "-c") == 0) {
+            change = true;
+            with_comments = true;
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "Ivalid operator in function arguments!\n");
             usage(stderr, argv[0]);
@@ -472,7 +506,7 @@ int main(int argc, char **argv)
     push_to_linked_list(new_prefix, used_files, false);
 
     int return_val = EXIT_FAILURE;
-    if (convert(input, tmp_output, guard, report_cycles, max_depth, 0, "", sections, used_files)) {
+    if (convert(input, tmp_output, guard, report_cycles, with_comments, max_depth, 0, "", sections, used_files)) {
         FILE* output = fopen(argv[i], "w");
         if (output == NULL) {
             fprintf(stderr, "Could not open output file!\n");
