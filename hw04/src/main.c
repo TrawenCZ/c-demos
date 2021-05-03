@@ -14,6 +14,7 @@ typedef struct linked_list_item
 {
     char *name;
     struct linked_list_item *next;
+    struct linked_list_item *prev;
     int path_movement_for_files;
 } linked_list_item;
 
@@ -86,12 +87,13 @@ bool reallocate(linked_list_item *new_item, int *size_limit)
     return true;
 }
 
-bool push_to_linked_list(linked_list_item *item, linked_list *list, bool check_path_depths) 
+bool push_to_linked_list(linked_list_item *item, linked_list *list, bool check_path_depths, bool should_free) 
 {
     if (list->top == NULL) {
         list->top = item;
         list->bottom = item;
         item->next = NULL;
+        item->prev = NULL;
     } else {
         linked_list_item *pPath = list->top;
         while (pPath != NULL) {
@@ -99,13 +101,16 @@ bool push_to_linked_list(linked_list_item *item, linked_list *list, bool check_p
                 if (check_path_depths && pPath->path_movement_for_files != item->path_movement_for_files) {
                     continue;
                 }
-                free(item->name);
-                free(item);
+                if (should_free) {
+                    free(item->name);
+                    free(item);
+                }
                 return false;
             }
             pPath = pPath->next;
         }
         item->next = NULL;
+        item->prev = list->bottom;
         list->bottom->next = item;
         list->bottom = item;
     }
@@ -116,40 +121,67 @@ bool push_to_linked_list(linked_list_item *item, linked_list *list, bool check_p
 bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections) 
 {
     char loaded;
+    char *err_msg = "Section not in correct format!\n";
+    fprintf(output, "[%s", prefix);
+    while (isspace(loaded = fgetc(input)) && loaded != '\n' && loaded != EOF) {
+        continue;
+    }
+    fprintf(output, "%c", loaded);
+    if (loaded == '\n' || loaded == EOF) {
+        fprintf(stderr, "%s", err_msg);
+        return false;
+    }
     linked_list_item *new_section = malloc(sizeof(linked_list_item));
     new_section->name = malloc(sizeof(char)*255);
     int size_counter = 0;
     int size_limit = 253;
-    char *err_msg = "Section not in correct format!\n";
+    bool space_found = false;
     char *mmr_msg = "Could not allocate enought memory for one of the sections!";
-    fprintf(output, "[%s", prefix);
+    
     while ((loaded = fgetc(input)) != ']') {
-        if (isspace(loaded)) continue;
+         if (isspace(loaded) && loaded != '\n' && loaded != EOF) {
+            space_found = true;
+            continue;
+        }
         if (strchr(ALLOWED_CHARS, loaded) == NULL) {
             fprintf(stderr, "Unallowed characters in section name! Allowed characters: %s\n", ALLOWED_CHARS);
+            free(new_section->name);
+            free(new_section);
             return false;
         }
         if (size_counter == size_limit) {
             if (!reallocate(new_section, &size_limit)) {
                 fprintf(stderr, "%s\n", mmr_msg);
+                free(new_section->name);
+                free(new_section);
                 return false;
             }
+        }
+        if (space_found) {
+            fprintf(stderr, "Found white space in section name!\n");
+            free(new_section->name);
+            free(new_section);
+            return false;
         }
         new_section->name[size_counter] = loaded;
         size_counter++;
     }
     new_section->name[size_counter] = '\0';
-    if (loaded != ']') {
+    if (loaded != ']' || size_counter == 0) {
         fprintf(stderr, "%s", err_msg);
+        free(new_section->name);
+        free(new_section);
         return false;
     }
     while ((loaded = fgetc(input)) != EOF && loaded != '\n') {
         if (isspace(loaded)) continue;
         fprintf(stderr, "%s", err_msg);
+        free(new_section->name);
+        free(new_section);
         return false;
     }
-    if (!push_to_linked_list(new_section, sections, false)) {
-        fprintf(stderr, "Duplicit sections detected! Or maybe cycle in .include.\n");
+    if (!push_to_linked_list(new_section, sections, false, true)) {
+        fprintf(stderr, "Duplicit sections detected! Or maybe cycle in .include statements.\n");
         return false;
     }
     fprintf(output, "%s", new_section->name);
@@ -163,11 +195,15 @@ bool key_bind(FILE *input, FILE *output, linked_list *keys, char first_char)
     linked_list_item *new_key = malloc(sizeof(linked_list_item));
     new_key->name = malloc(sizeof(char)*255);
     new_key->name[0] = first_char;
+    bool space_found = false;
     int size_counter = 1;
     int size_limit = 253;
-    char loaded;
-    while ((loaded = fgetc(input)) != '=') {
-        if (isspace(loaded)) continue;
+    char loaded;    
+    while ((loaded = fgetc(input)) != '=' && loaded != '\n' && loaded != EOF) {
+        if (isspace(loaded)) {
+            space_found = true;
+            continue;
+        }
         if (strchr(ALLOWED_CHARS, loaded) == NULL) {
             fprintf(stderr, "Key characters not in allowed range! Allowed characters: %s\n", ALLOWED_CHARS);
             free(new_key->name);
@@ -177,22 +213,51 @@ bool key_bind(FILE *input, FILE *output, linked_list *keys, char first_char)
         if (size_counter == size_limit) {
             if (!reallocate(new_key, &size_limit)) {
                 fprintf(stderr, "Could not allocate enough memory for one of the keys.\n");
+                free(new_key->name);
+                free(new_key);
                 return false;
             }
+        }
+        if (space_found) {
+            fprintf(stderr, "Detected white space inside of key!\n");
+            free(new_key->name);
+            free(new_key);
+            return false;
         }
         new_key->name[size_counter] = loaded;
         size_counter++;
     }
+    if (loaded == '\n' || loaded == EOF) {
+        fprintf(stderr, "Key value not specified correctly!\n");
+        free(new_key->name);
+        free(new_key);
+        return false;
+    }
 
-    if (!push_to_linked_list(new_key, keys, false)) {
+    if (!push_to_linked_list(new_key, keys, false, true)) {
         fprintf(stderr, "Key already in section!\n");
         return false;
     }
     new_key->name[size_counter] = '\0';
     fprintf(output, "%s = ", new_key->name + 1);
+    while (isspace(loaded = fgetc(input)) && loaded != '\n') {
+        continue;
+    }
+    fprintf(output, "%c", loaded);
+    if (loaded == '\n') return true;
+
     int loaded_long;
+    int num_of_spaces = 0;
     while ((loaded_long = fgetc(input)) != EOF && loaded_long != '\n') {
-        fprintf(output, "%c", loaded_long);
+        if (isspace(loaded_long)) {
+            num_of_spaces++;
+        } else {
+            while (num_of_spaces != 0) {
+                fprintf(output, " ");
+                num_of_spaces--;
+            }
+            fprintf(output, "%c", loaded_long);
+        }
     }
     fprintf(output, "\n");
     return true;
@@ -205,7 +270,13 @@ bool is_include(FILE* input, linked_list_item *new_path)
         if (fgetc(input) != pattern[i]) return false;
     }
     char loaded;
-    int size_counter = 0;
+    while (isspace(loaded = fgetc(input)) && loaded != '\n' && loaded != EOF) continue;
+    if (loaded == '\n' || loaded == EOF) {
+        fprintf(stderr, "Path after .include statement is empty!\n");
+        return false;
+    }
+    new_path->name[0] = loaded;
+    int size_counter = 1;
     int size_limit = 254;
     while ((loaded = fgetc(input)) != '\n' && loaded != EOF) {
         size_counter++;
@@ -232,6 +303,9 @@ int to_prefix(char* path, linked_list_item *new_prefix)
             size_counter++;
             previous_is_slash = true;
         } else if (path[i] == '.') {
+            if (i == 0) {
+                depth_counter++;
+            }
             depth_counter--;
             continue;
         } else if (strchr(ALLOWED_CHARS, path[i]) != NULL) {
@@ -263,6 +337,23 @@ bool is_valid_path(linked_list_item *new_path)
                    return false;
                }
     return true;
+}
+
+void pop_from_linked_list(linked_list *list)
+{
+    linked_list_item *pNewBottom = list->bottom->prev;
+    if (pNewBottom == NULL) {
+        list->top = NULL;
+        free(list->bottom->name);
+        free(list->bottom);
+        list->bottom = NULL;
+    } else {
+        free(pNewBottom->next->name);
+        free(pNewBottom->next);
+        pNewBottom->next = NULL;
+        list->bottom = pNewBottom;
+    }
+    list->size--;
 }
 
 bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, int max_depth,
@@ -300,10 +391,24 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     free(new_path->name);
     free(new_path);
 
-    if (!push_to_linked_list(new_prefix, used_files, true) && (guard || report_cycles)) {
-        fprintf(stderr, "Cycle in .include statements detected!\n");
-        fclose(new_input);
-        return false;
+    if (!push_to_linked_list(new_prefix, used_files, true, false)) {
+        if (guard || report_cycles) {
+            fprintf(stderr, "Cycle in .include statements detected!\n");
+            fclose(new_input);
+            return false;
+        }
+        if (used_files->top == NULL) {
+            used_files->top = new_prefix;
+            used_files->bottom = new_prefix;
+            new_prefix->next = NULL;
+            new_prefix->prev = NULL;
+        } else {
+            new_prefix->next = NULL;
+            new_prefix->prev = used_files->bottom;
+            used_files->bottom->next = new_prefix;
+            used_files->bottom = new_prefix;
+        }
+        used_files->size++;
     } else if (curr_file_depth + new_prefix->path_movement_for_files < 0) {
         fprintf(stderr, "Cannot go higher in filesystem than the level on which has program been launched.\n");
         fclose(new_input);
@@ -313,6 +418,7 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
         fclose(new_input);
         return false;
     }
+    pop_from_linked_list(used_files);
     fclose(new_input);
     return true;
 }
@@ -326,6 +432,7 @@ void copy_line(FILE* input, FILE* output)
     }
     fprintf(output, "\n");
 }
+
 
 bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, int max_depth, 
              int curr_file_depth, char *prefix, linked_list *sections, linked_list *used_files) 
@@ -503,7 +610,7 @@ int main(int argc, char **argv)
     linked_list_item *new_prefix = malloc(sizeof(linked_list_item));
     new_prefix->name = malloc(sizeof(char)*255);
     new_prefix->path_movement_for_files = to_prefix(argv[i-1], new_prefix);
-    push_to_linked_list(new_prefix, used_files, false);
+    push_to_linked_list(new_prefix, used_files, false, true);
 
     int return_val = EXIT_FAILURE;
     if (convert(input, tmp_output, guard, report_cycles, with_comments, max_depth, 0, "", sections, used_files)) {
