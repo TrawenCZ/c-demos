@@ -127,24 +127,39 @@ bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections)
 {
     char loaded;
     char *err_msg = "Section not in correct format!\n";
-    fprintf(output, "[%s", prefix);
+    fprintf(output, "[");
+
     while (isspace(loaded = fgetc(input)) && loaded != '\n' && loaded != EOF) {
         continue;
     }
-    fprintf(output, "%c", loaded);
+
     if (loaded == '\n' || loaded == EOF) {
         fprintf(stderr, "%s", err_msg);
         return false;
     }
+
     linked_list_item *new_section = malloc(sizeof(linked_list_item));
     if (new_section == NULL) return malloc_failed();
     new_section->name = malloc(sizeof(char)*255);
     if (new_section->name == NULL) {free(new_section); return malloc_failed(); }
+
     int size_counter = 0;
     int size_limit = 253;
     bool space_found = false;
     char *mmr_msg = "Could not allocate enought memory for one of the sections!";
-    
+
+    while ((int) strlen(prefix) > size_limit) {
+        if (!reallocate(new_section, &size_limit)) {
+            fprintf(stderr, "%s", mmr_msg);
+        }
+    }
+
+    strcpy(new_section->name, prefix);
+    size_counter += strlen(prefix);
+    new_section->name[size_counter] = loaded;
+    new_section->name[size_counter+1] = '\0';
+    size_counter++;
+
     while ((loaded = fgetc(input)) != ']') {
          if (isspace(loaded) && loaded != '\n' && loaded != EOF) {
             space_found = true;
@@ -191,6 +206,7 @@ bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections)
         fprintf(stderr, "Duplicit sections detected! Or maybe cycle in .include statements.\n");
         return false;
     }
+    printf("%s\n", new_section->name);
     fprintf(output, "%s", new_section->name);
     fprintf(output, "]\n");
     return true;
@@ -298,7 +314,7 @@ bool is_include(FILE* input, linked_list_item *new_path)
     return true;
 }
 
-int to_prefix(char* path, linked_list_item *new_prefix)
+bool to_prefix(char* path, linked_list_item *new_prefix, int depth_to_control, int *depth_to_save, bool guard)
 {
     int size_counter = 0;
     int size_limit = 254;
@@ -312,8 +328,13 @@ int to_prefix(char* path, linked_list_item *new_prefix)
             size_counter++;
             previous_is_slash = true;
         } else if (path[i] == '.') {
+            if (previous_is_slash) size_counter--;
             previous_is_slash = false;
             depth_counter--;
+            if (depth_counter <= -2 && (depth_to_control + depth_counter) < 0 && guard) {
+                fprintf(stderr, "Detected step higher than root directory (directory where program has been launched).\n");
+                return false;
+            }
             continue;
         } else if (strchr(ALLOWED_CHARS, path[i]) != NULL) {
             previous_is_slash = false;
@@ -330,7 +351,8 @@ int to_prefix(char* path, linked_list_item *new_prefix)
     }
     new_prefix->name[size_counter - 3] = ':';
     new_prefix->name[size_counter - 2] = '\0';
-    return depth_counter + 1;       // + 1 because of decreasing by 1 in .ini 
+    *depth_to_save = depth_counter+1; // + 1 because of decreasing by 1 in .ini 
+    return true;       
 }
 
 bool is_valid_path(linked_list_item *new_path)
@@ -397,7 +419,14 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     if (new_prefix == NULL) return malloc_failed();
     new_prefix->name = malloc(sizeof(char)*255);
     if (new_prefix->name == NULL) {free(new_prefix); return malloc_failed(); }
-    new_prefix->path_movement_for_files = to_prefix(new_path->name, new_prefix);
+    if (!to_prefix(new_path->name, new_prefix, curr_file_depth, &(new_prefix->path_movement_for_files), guard)) {
+        free(new_path->name);
+        free(new_path);
+        free(new_prefix->name);
+        free(new_prefix);
+        fclose(new_input);
+        return false;
+    }
     free(new_path->name);
     free(new_path);
 
@@ -635,7 +664,7 @@ int main(int argc, char **argv)
         if (new_prefix != NULL) free(new_prefix);
         return EXIT_FAILURE;
     };
-    new_prefix->path_movement_for_files = to_prefix(argv[i-1], new_prefix);
+    to_prefix(argv[i-1], new_prefix, INT_MAX, &(new_prefix->path_movement_for_files), guard);
     push_to_linked_list(new_prefix, used_files, false, true);
 
     int return_val = EXIT_FAILURE;
