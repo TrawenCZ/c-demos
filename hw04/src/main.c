@@ -26,8 +26,8 @@ typedef struct linked_list
 } linked_list;
 
 
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool comments_and_empty_lines, int max_depth, 
-             int curr_file_depth, char *prefix, linked_list *sections, linked_list *used_files);
+bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool comments_and_empty_lines,
+             int max_depth, char *prefix, linked_list *sections, linked_list *used_files);
 
 static void usage(FILE *output, const char *program)
 {
@@ -157,7 +157,6 @@ bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections)
     strcpy(new_section->name, prefix);
     size_counter += strlen(prefix);
     new_section->name[size_counter] = loaded;
-    new_section->name[size_counter+1] = '\0';
     size_counter++;
 
     while ((loaded = fgetc(input)) != ']') {
@@ -206,9 +205,7 @@ bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections)
         fprintf(stderr, "Duplicit sections detected! Or maybe cycle in .include statements.\n");
         return false;
     }
-    printf("%s\n", new_section->name);
-    fprintf(output, "%s", new_section->name);
-    fprintf(output, "]\n");
+    fprintf(output, "%s]\n", new_section->name);
     return true;
 }
 
@@ -314,34 +311,52 @@ bool is_include(FILE* input, linked_list_item *new_path)
     return true;
 }
 
-bool to_prefix(char* path, linked_list_item *new_prefix, int depth_to_control, int *depth_to_save, bool guard)
+bool to_prefix(char* path, linked_list_item *new_prefix, int *depth_to_save, bool guard)
 {
     int size_counter = 0;
     int size_limit = 254;
     int depth_counter = 0;
     bool previous_is_slash = false;
+    bool prev_is_char = false;
+    int word_len = 0;
+    int word_count = 0;
     for (int i = 0; i < (int) strlen(path); i++) {
         if (path[i] == '/' || path[i] == '\\') {
             if (previous_is_slash) continue;
             depth_counter++;
-            new_prefix->name[size_counter] = ':';
+            if (size_counter > 0) new_prefix->name[size_counter] = ':';
+            if (word_len > 0) {
+                word_count++;
+            }
             size_counter++;
             previous_is_slash = true;
+            prev_is_char = false;
         } else if (path[i] == '.') {
-            if (previous_is_slash) size_counter--;
+            if (previous_is_slash) {
+                size_counter--;
+            } else if (!prev_is_char && word_len > 0) {
+                size_counter -= word_len + word_count;
+                word_len = 0;
+                word_count = 0;
+            }
             previous_is_slash = false;
             depth_counter--;
-            if (depth_counter <= -2 && (depth_to_control + depth_counter) < 0 && guard) {
+            prev_is_char = false;
+            if (depth_counter <= -2 && guard) {
                 fprintf(stderr, "Detected step higher than root directory (directory where program has been launched).\n");
                 return false;
             }
             continue;
         } else if (strchr(ALLOWED_CHARS, path[i]) != NULL) {
             previous_is_slash = false;
+            word_len++;
+            prev_is_char = true;
             new_prefix->name[size_counter] = path[i];
             size_counter++;
         } else {
             previous_is_slash = false;
+            word_len++;
+            prev_is_char = true;
             new_prefix->name[size_counter] = '?';
             size_counter++;
         }
@@ -385,8 +400,8 @@ void pop_from_linked_list(linked_list *list)
     list->size--;
 }
 
-bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, int max_depth,
-                       int curr_file_depth, linked_list *sections, linked_list *used_files)
+bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles,
+                       bool with_comments, int max_depth, linked_list *sections, linked_list *used_files)
 {
     linked_list_item *new_path = malloc(sizeof(linked_list_item));
     if (new_path == NULL) return malloc_failed();
@@ -406,7 +421,6 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
         free(new_path);
         return false;
     }
-
     FILE* new_input = fopen(new_path->name, "r");
     if (new_input == NULL) {
         fprintf(stderr, "Cannot open file at path after '.include' statement in file.\n");
@@ -419,7 +433,7 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     if (new_prefix == NULL) return malloc_failed();
     new_prefix->name = malloc(sizeof(char)*255);
     if (new_prefix->name == NULL) {free(new_prefix); return malloc_failed(); }
-    if (!to_prefix(new_path->name, new_prefix, curr_file_depth, &(new_prefix->path_movement_for_files), guard)) {
+    if (!to_prefix(new_path->name, new_prefix, &(new_prefix->path_movement_for_files), guard)) {
         free(new_path->name);
         free(new_path);
         free(new_prefix->name);
@@ -448,12 +462,8 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
             used_files->bottom = new_prefix;
         }
         used_files->size++;
-    } else if (curr_file_depth + new_prefix->path_movement_for_files < 0) {
-        fprintf(stderr, "Cannot go higher in filesystem than the level on which has program been launched.\n");
-        fclose(new_input);
-        return false;
     }
-    if (!convert(new_input, output, guard, report_cycles, with_comments, max_depth, curr_file_depth + new_prefix->path_movement_for_files, new_prefix->name, sections, used_files)) {
+    if (!convert(new_input, output, guard, report_cycles, with_comments, max_depth, new_prefix->name, sections, used_files)) {
         fclose(new_input);
         return false;
     }
@@ -473,8 +483,8 @@ void copy_line(FILE* input, FILE* output)
 }
 
 
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, int max_depth, 
-             int curr_file_depth, char *prefix, linked_list *sections, linked_list *used_files) 
+bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, 
+             int max_depth, char *prefix, linked_list *sections, linked_list *used_files)
 {
     linked_list *keys = malloc(sizeof(linked_list));
     if (keys == NULL) return malloc_failed();
@@ -508,7 +518,7 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool wit
         }
         if (loaded == '.') {
             if (!include_processer(input, output, guard, report_cycles, with_comments, 
-                                   max_depth, curr_file_depth, sections, used_files)) {
+                                   max_depth, sections, used_files)) {
                 clear(keys);
                 return false;
             }
@@ -664,11 +674,11 @@ int main(int argc, char **argv)
         if (new_prefix != NULL) free(new_prefix);
         return EXIT_FAILURE;
     };
-    to_prefix(argv[i-1], new_prefix, INT_MAX, &(new_prefix->path_movement_for_files), guard);
+    to_prefix(argv[i-1], new_prefix, &(new_prefix->path_movement_for_files), guard);
     push_to_linked_list(new_prefix, used_files, false, true);
 
     int return_val = EXIT_FAILURE;
-    if (convert(input, tmp_output, guard, report_cycles, with_comments, max_depth, 0, "", sections, used_files)) {
+    if (convert(input, tmp_output, guard, report_cycles, with_comments, max_depth, "", sections, used_files)) {
         FILE* output = fopen(argv[i], "w");
         if (output == NULL) {
             fprintf(stderr, "Could not open output file!\n");
