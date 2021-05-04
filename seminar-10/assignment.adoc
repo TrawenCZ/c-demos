@@ -1,0 +1,248 @@
+---
+title: "Cvičení 10: Jednotkové testovanie"
+layout: "seminar"
+authors:
+  - xlacko1
+publish: 1
+---
+
+Na cvičení 7 ste si skúsili implementovať jednoduchú dátovú štruktúru,
+__spájaný zoznam__. Na dnešom cvičení sa úlohy obrátia. V kostre máte
+pripravenú implementáciu úplne inej dátovej štruktúry a vašou úlohou
+je pomocou testov odhaliť niekoľko chýb voči požadovanému chovaniu.
+
+== Zadanie
+
+V hlavičke `queue.h` sa nachádza deklarácia dátovej štruktúry
+__cyklický rad s fixnou veľkosťou__ (angl. __fixed-size cyclic queue__).
+Vašou úlohou je do `tests.c` napísať testy pre každú funkciu tak, aby ste
+odhalili chyby implementácie voči očakávanému chovaniu popísanému
+v dokumentácii hlavičkového súboru.
+
+== Popis cyklického radu
+
+Rad (čes. __fronta__, angl. __queue__) je abstraktná dátová štruktúra,
+ktorá má typicky dve operácie, `enqueue` a `dequeue` (môžu sa volať aj inak).
+Prvá operácia prvky do radu vkladá, druhá ich vyberá.
+Prvky sa z radu vyberajú presne v takom poradí, v akom sa vkladajú.
+
+V kontexte minulého cvičenia by bolo možné rad implementovať pomocou
+obojsmerne spájaného zoznamu napríklad tak, že
+
+* `enqueue` urobí `list_push()`,
+* `dequeue` urobí `list_shift()`,
+* ostatné operácie `list_pop()` a `list_unshift()` sa zakážu
+
+Variant, kedy sa použije `list_unshift()` a `list_pop()` bude fungovať tiež.
+
+Implementácia použitá v tomto cvičení však spájaný zoznam nepoužíva,
+pretože by ste museli testovať aj interné stavy uzlov. Implementácia
+preto používa pevnú veľkosť (__fixed size__), pričom sa recykluje
+stále rovnaký úsek pamäte akoby "do kruhu" (__cyclic__).
+
+Štruktúra `struct queue` obsahuje 5 položiek:
+
+* `size_t element` -- veľkosť prvkov
+* `size_t capacity` -- počet prvkov, ktoré sa dajú uložiť v rade
+* `size_t index` -- index prvku v pomyslenom poli radu, ktorý sa najbližšie
+  vyberie operáciou `dequeue`, ak sú v rade nejaké prvky
+* `size_t size` -- počet aktuálne uložených prvkov
+* `void *memory` -- interná pamäť radu
+
+Pri vložení prvku do radu sa hodnota (**nie pointer**) skopíruje do
+poľa `memory` na pozíciu tak, aby bol `size * element` bytov ďaleko od
+`index`. Ak by táto hodnota prekročila veľkosť pamäte, tak sa začne znova od
+začiatku. Prvky sa vyberajú jednoducho z pozície označenej ako `index`,
+jeho hodnota s následne zvýši alebo vráti na 0, ak by sa dostala na `capacity`.
+
+**Príklad**
+
+Majme rad znakov (`char`) kapacity 4, ktorý je iniciálne prázdny.
+To znamená, že `element = sizeof(char)`, `capacity = 4`, `index = 0`
+a `size = 0`. Rad zapíšeme ako `[>?,?,?,?]`, kde `>` označuje index.
+Hodnoty `?` sú neinicializované alebo neznáme.
+
+* vložením znakov `a`, `b` a `c` vznikne rad `[>a,b,c,?]`
+* výberom znaku dostaneme `a`, ostane rad `[?,>b,c,?]`
+* výberom ďalšieho znaku dostaneme `b`, ostane rad `[?,?,>c,?]`
+* vložením znaku `d` dostaneme rad `[?,?,>c,d]`
+* vložením ďalšieho znaku `e` sa prvky začnú vkladať odzačiatku, tj.
+  dostaneme rad `[e,?,>c,d]`
+
+== Popis operácií
+
+NOTE: Presné požiadavky na chovanie, ktoré máte testovať, nájdete
+v hlavičkovom súbore `queue.h`
+
+[source,c]
+----
+bool queue_create(struct queue **queue, size_t element_size, size_t capacity);
+----
+
+* vytvorí nový rad s požadovanými parametrami
+
+[source,c]
+----
+void queue_destroy(struct queue *queue);
+----
+
+* dealokuje štruktúru
+
+[source,c]
+----
+size_t queue_element_size(const struct queue *queue);
+size_t queue_capacity(const struct queue *queue);
+size_t queue_size(const struct queue *queue);
+----
+
+* funkcie vyššie zisťujú rôzne informácie o rade
+
+[source,c]
+----
+bool queue_is_empty(const struct queue *queue);
+bool queue_is_full(const struct queue *queue);
+----
+
+* test, či je rad prázdny resp. plný
+
+[source,c]
+----
+bool queue_enqueue(struct queue *queue, const void *data);
+----
+
+* implementuje operáciu `enqueue`
+* v kontraste s cvičením so spájaným zoznamom táto funkcia kopíruje
+  __dáta__, nie hodnotu ukazateľa
+
+[source,c]
+----
+bool queue_dequeue(struct queue *queue, void *data);
+----
+
+* implementuje operáciu `dequeue`
+
+[source,c]
+----
+const void *queue_peek(const struct queue *queue);
+----
+
+* vráti konštantný ukazateľ na najstarší prvok v rade, ak existuje
+
+Ukážku použitia tejto štruktúry nájdete v `playground.c`.
+
+****
+
+.Prečo zdrojový kód vyzerá ako Perl?
+[CAUTION,icon='fab fa-sith']
+Cieľom cvičenia je testovať chovanie štruktúry podľa dokumentácie.
+Často je možné odhaliť chyby jednoduchým prečítaním zdrojového kódu, obzvlášť
+v  implementáciách, ako je táto. Aby sme tomu zabránili,
+zdrojový kód dodaný k cvičeniu prešiel procesom __obfuskácie__.
+
+Obfuskácia sa používa vtedy, ak chceme čo najviac sťažiť porozumenie
+zdrojového kódu. Zdrojový kód v `queue.c` prešiel týmito zmenami:
+
+. prístup ku štruktúram sa implementuje cez globálne pole unionov,
+. jednoduché operácie a konštanty (napr. 0) sú implementované
+  pomocou volaní nesúvisiacich funkcí, okrajových prípadov atď.
+. množstvo kódu generujú makrá v `perl.h`
+
+****
+
+== Úloha: Testovanie
+
+Cvičiaci vytvorí v službe link:http://collabedit.com/[collabedit]
+zdieľaný dokument, do ktorého sa budú ukladať testy.
+Následne rozdelí študentov do niekoľkých skupín, pričom každá skupina dostane
+pár funkcí na otestovanie. Odporúčané rozdelenie je na 4 skupiny:
+
+. `queue_size()`, `queue_element_size()`, `queue_capacity()`
+. `queue_peek()`, `queue_is_full()`, `queue_is_empty()`
+. `queue_create()`, `queue_enqueue()`
+. `queue_dequeue()`
+
+Študenti v skupine môžu diskutovať o prípadoch, ktoré by mali otestovať,
+a následne k nim písať testy. Svoje testy študenti priebežne kopírujú
+do zdieľaného dokumentu. Cvičiaci tieto testy občas spustí a prípadne vysvetlí,
+prečo zlyhali. Cieľom je pomocou testov nájsť chyby voči dokumentácii.
+
+=== Testovací nástroj
+
+Testy píšte do `tests.c`. Tento súbor nemá funkciu `main()`,
+obsahuje len testy. Každý test sa začína makrom `TEST` s názvom testu.
+
+V tele v blokových zátvorkých je možné písať ľubovoľný kód jazyka C,
+môžete volať funkcie, deklarovať premenné, používať cykly atď. Okrem toho
+môžete používať makro `CHECK`, ktoré skontroluje, že nejaká podmienka platí,
+inak test skončí neúspešne.
+
+[source,c]
+----
+TEST(zero)
+{
+    int zero = 0;
+    CHECK(zero == 0);
+}
+----
+
+=== Ako na jednotkové testovanie
+
+Testovanie je všeobecne ťažké a trvá dlhý čas a prax, kým sa programátor
+naučí poriadne testovať. Táto časť preto uvádza len veľmi jednoduché rady,
+čo pri testovaní robiť a čo nie.
+
+==== Testujte vždy len jednu funkciu
+
+Predstavte si takýto test:
+
+[source,c]
+----
+TEST(velky_spatny)
+{
+    struct queue *queue;
+    queue_create(&queue, sizeof(int), 16u);
+
+    int data = 42;
+    queue_enqueue(queue, &data);
+    CHECK(queue_size(queue) == 1u);
+}
+----
+
+Ak tento test zlyhá, nedá sa jednoznačne povedať, ktorá funkcia za to môže.
+Chyba môže byť v `queue_size()`, `queue_enqueue()` alebo rovnako aj `queue_create()`.
+
+Každý `TEST` by mal preto volať len jednu funkciu z testovaného rozhrania.
+
+==== Vytvárajte štruktúru sami
+
+Keďže by ste vďaka predchádzajúcemu bodu nemali volať `queue_create()`
+s výnimkou testu priamo pre túto funkciu, musíte si štruktúru vyrobiť sami
+pred každým testom. Takto máte kontrolu nad vstupom funkcie
+a môžete jednoducho otestovať, že po skončení sa štruktúra zmenila očakávaným
+spôsobom.
+
+Príklady nájdete v ukážkových testoch v `tests.c`.
+
+==== Každý test nech testuje jeden prípad
+
+Aby bolo možné ľahko odlíšiť okolnosti, za akých sa funkcia nespráva očakávane,
+každý test by mal testovať jeden špecifický scenár.
+
+Napríklad, pre test `queue_enqueue()` môžeme testovať tieto prípady:
+
+* prázdny rad s nenulovou kapacitou
+* čiastočne zaplnený rad, v ktorom je miesto na konci
+* čiastočne zaplnený rad, v ktorom je miesto na začiatku
+* plný rad
+* ...
+
+Pre každý takýto prípad by mal exitovať samostatný test.
+Tieto testy môžete pomenovať `+++nazov_testovanej_funkcie__pripad+++`,
+napríklad `+++queue_enqueue__empty_with_nonzero_capacity+++`.
+
+==== Nepoužívajte náhodnosť
+
+Testy založené na náhodnosti sú veľmi užitočné, ale je ťažké ich
+urobiť správne. Jeden z hlavných problémov je determinizácia.
+V prípade, že test zlyhá, je často nutné takýto test zopakovať, napríklad
+kvôli ladeniu. Na toto cvičenie náhodné testy nepotrebujete.
