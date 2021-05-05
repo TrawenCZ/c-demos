@@ -399,7 +399,7 @@ bool to_prefix_rec(char *path, int index, linked_list *prefixed_path)
     return true;
 }
 
-bool to_prefix(char* path, linked_list_item *new_prefix, bool guard)
+bool to_prefix(char* path, linked_list_item *new_prefix)
 {
     linked_list *prefixed_path = malloc(sizeof(linked_list));
     int size_limit = 254;
@@ -460,7 +460,7 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     new_prefix->name = malloc(sizeof(char)*255);
     if (new_prefix->name == NULL) {free(new_prefix); return malloc_failed(); }
 
-    if (!to_prefix(new_path->name, new_prefix, guard)) {
+    if (!to_prefix(new_path->name, new_prefix)) {
         free(new_path->name);
         free(new_path);
         free(new_prefix->name);
@@ -472,10 +472,13 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     free(new_path);
 
     if (!push_to_linked_list(new_prefix, used_files, (guard || report_cycles))) {
-        if (guard || report_cycles) {
+        if (report_cycles) {
             fprintf(stderr, "Cycle in .include statements detected!\n");
             fclose(new_input);
             return false;
+        } else if (guard) {
+            fclose(new_input);
+            return true;
         }
     }
     if (!convert(new_input, output, guard, report_cycles, with_comments, max_depth, new_prefix->name, sections, used_files)) {
@@ -689,7 +692,7 @@ int main(int argc, char **argv)
         if (new_prefix != NULL) free(new_prefix);
         return EXIT_FAILURE;
     };
-    to_prefix(argv[i-1], new_prefix, guard);
+    to_prefix(argv[i-1], new_prefix);
     push_to_linked_list(new_prefix, used_files, true);
 
     int return_val = EXIT_FAILURE;
