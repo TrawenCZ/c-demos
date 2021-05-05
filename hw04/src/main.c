@@ -25,8 +25,14 @@ typedef struct linked_list
     int size;
 } linked_list;
 
+typedef struct buffer {
+    char *text;
+    int size;
+    int size_limit;
+} buffer;
 
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool comments_and_empty_lines,
+
+bool convert(FILE *input, buffer *output, bool guard, bool report_cycles, bool comments_and_empty_lines,
              int max_depth, char *prefix, linked_list *sections, linked_list *used_files);
 
 static void usage(FILE *output, const char *program)
@@ -43,6 +49,37 @@ static void usage(FILE *output, const char *program)
             "\n";
 
     fprintf(output, help, program, program);
+}
+
+bool buffer_realloc(buffer *buffer_to_realloc)
+{
+    buffer_to_realloc->size_limit += 255;
+    char *holder = realloc(buffer_to_realloc->text, sizeof(char)*buffer_to_realloc->size_limit);
+    if (holder == NULL) {
+        fprintf(stderr, "Could not allocate enough memory for storing .ini file(s) content.\n");
+        return false;
+    }
+    buffer_to_realloc->text = holder;
+    return true;
+}
+
+bool bcprintf(buffer *output, char char_to_print)
+{
+    if (output->size + 2 >= output->size_limit && !buffer_realloc(output)) return false;
+    output->text[output->size] = char_to_print;
+    output->size++;
+    output->text[output->size] = '\0';
+    return true;
+}
+
+bool bsprintf(buffer *output, char *string)
+{
+    while ((int) (output->size + strlen(string) + 1) >= output->size_limit) {
+        if (!buffer_realloc(output)) return false;
+    }
+    strcpy(output->text + output->size, string);
+    output->size += strlen(string);
+    return true;
 }
 
 bool malloc_failed(void) {
@@ -120,11 +157,11 @@ bool push_to_linked_list(linked_list_item *item, linked_list *list, bool should_
     return true;
 }
 
-bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections) 
+bool sectionize(FILE *input, buffer *output, char *prefix, linked_list *sections) 
 {
     char loaded;
     char *err_msg = "Section not in correct format!\n";
-    fprintf(output, "[");
+    if (!bcprintf(output, '[')) return false;
 
     while (isspace(loaded = fgetc(input)) && loaded != '\n' && loaded != EOF) {
         continue;
@@ -202,11 +239,12 @@ bool sectionize(FILE *input, FILE *output, char *prefix, linked_list *sections)
         fprintf(stderr, "Duplicit sections detected! Or maybe cycle in .include statements.\n");
         return false;
     }
-    fprintf(output, "%s]\n", new_section->name);
+    if (!bsprintf(output, new_section->name)) return false;
+    if (!bsprintf(output, "]\n")) return false;
     return true;
 }
 
-bool key_bind(FILE *input, FILE *output, linked_list *keys, char first_char) 
+bool key_bind(FILE *input, buffer *output, linked_list *keys, char first_char) 
 {   
     helper_printer(keys);
     linked_list_item *new_key = malloc(sizeof(linked_list_item));
@@ -257,28 +295,30 @@ bool key_bind(FILE *input, FILE *output, linked_list *keys, char first_char)
         fprintf(stderr, "Key already in section!\n");
         return false;
     }
+    
     new_key->name[size_counter] = '\0';
-    fprintf(output, "%s = ", new_key->name + 1);
+    if (!bsprintf(output, new_key->name + 1)) return false;
+    if (!bsprintf(output, " = ")) return false;
+
     while (isspace(loaded = fgetc(input)) && loaded != '\n') {
         continue;
     }
-    fprintf(output, "%c", loaded);
+    if (!bcprintf(output, loaded)) return false;
     if (loaded == '\n') return true;
 
-    int loaded_long;
     int num_of_spaces = 0;
-    while ((loaded_long = fgetc(input)) != EOF && loaded_long != '\n') {
-        if (isspace(loaded_long)) {
+    while ((loaded = fgetc(input)) != EOF && loaded != '\n') {
+        if (isspace(loaded)) {
             num_of_spaces++;
         } else {
             while (num_of_spaces != 0) {
-                fprintf(output, " ");
+                if (!bcprintf(output, ' ')) return false;
                 num_of_spaces--;
             }
-            fprintf(output, "%c", loaded_long);
+            if (!bcprintf(output, loaded)) return false;
         }
     }
-    fprintf(output, "\n");
+    if (!bcprintf(output, '\n')) return false;
     return true;
 }
 
@@ -426,7 +466,7 @@ bool to_prefix(char* path, linked_list_item *new_prefix)
 }
 
 
-bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles,
+bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycles,
                        bool with_comments, int max_depth, linked_list *sections, linked_list *used_files)
 {
     linked_list_item *new_path = malloc(sizeof(linked_list_item));
@@ -490,18 +530,19 @@ bool include_processer(FILE *input, FILE *output, bool guard, bool report_cycles
     return true;
 }
 
-void copy_line(FILE* input, FILE* output) 
+bool copy_line(FILE* input, buffer *output) 
 {
     int loaded;
-    fprintf(output, ";");
+    if (!bcprintf(output, ';')) return false;
     while ((loaded = fgetc(input)) != '\n' && loaded != EOF) {
-        fprintf(output, "%c", loaded);
+        if (!bcprintf(output, loaded)) return false;
     }
-    fprintf(output, "\n");
+    if (!bcprintf(output, '\n')) return false;
+    return true;
 }
 
 
-bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool with_comments, 
+bool convert(FILE *input, buffer *output, bool guard, bool report_cycles, bool with_comments, 
              int max_depth, char *prefix, linked_list *sections, linked_list *used_files)
 {
     linked_list *keys = malloc(sizeof(linked_list));
@@ -511,15 +552,14 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool wit
     bool section_is_set = false;
     while ((loaded = fgetc(input)) != EOF) {
         if (loaded == '\n') {
-            if (with_comments) fprintf(output, "\n");
+            if (with_comments) bcprintf(output, '\n');
             continue;
         }
         if (isspace(loaded)) continue;
         
         if (loaded == ';') {
-            if (with_comments) {
-                copy_line(input, output);
-            } else ignore_line(input);
+            if (with_comments && !copy_line(input, output)) return false;
+            else ignore_line(input);
             continue;
         }
         if (loaded == '[') {
@@ -549,7 +589,7 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool wit
                 clear(keys);
                 return false;
             }
-            fprintf(output, "%c", loaded);
+            if (!bcprintf(output, loaded)) return false;
             if (!key_bind(input, output, keys, loaded)) {
                 clear(keys);
                 return false;
@@ -563,40 +603,6 @@ bool convert(FILE *input, FILE *output, bool guard, bool report_cycles, bool wit
     }
     clear(keys);
     return true;
-}
-
-char* create_tmp_output(FILE *tmp_file)
-{
-    fclose(tmp_file);
-    char *prefix = malloc(sizeof(char)*255);
-    if (prefix == NULL) {
-        fprintf(stderr, "Could not allocate enough memory for temporary file name.\n");
-        return "";
-    };
-    char *ini_postfix = ".ini";
-    strcpy(prefix, "tmp.ini");
-    int size_counter = 7;
-    int size_limit = 254;
-    while ((tmp_file = fopen(prefix, "r")) != NULL) {
-        if (size_counter == size_limit) {
-            size_limit += 255;
-            prefix = realloc(prefix, size_limit);   // I know this is not the best way to do it, but I rely on enough memory in this case
-                                                    // and really low chance of existence of so many tmp files
-        }
-        fclose(tmp_file);
-        prefix[size_counter-4] = '1';
-        strcpy(prefix + (size_counter - 3), ini_postfix);
-        size_counter++;
-    }
-    return prefix;
-}
-
-void file_copy(FILE* input, FILE* output) 
-{
-    int loaded;
-    while ((loaded = fgetc(input)) != EOF) {
-        fprintf(output, "%c", loaded);
-    }
 }
 
 
@@ -659,18 +665,6 @@ int main(int argc, char **argv)
         max_depth = INT_MAX;
     }
 
-    bool prefix_is_mallocated = false;
-    char *tmp_output_prefix = "tmp.ini";
-    FILE *tmp_output = fopen(tmp_output_prefix, "r");
-    if (tmp_output != NULL) {
-        tmp_output_prefix = create_tmp_output(tmp_output);
-        if (strcmp(tmp_output_prefix, "") == 0) return EXIT_FAILURE;
-        tmp_output = fopen(tmp_output_prefix, "w");
-        prefix_is_mallocated = true;
-    } else {
-        tmp_output = fopen(tmp_output_prefix, "w");
-    }
-
     linked_list *used_files = malloc(sizeof(linked_list));
     linked_list *sections = malloc(sizeof(linked_list));
     if (used_files == NULL || sections == NULL) {
@@ -695,26 +689,29 @@ int main(int argc, char **argv)
     to_prefix(argv[i-1], new_prefix);
     push_to_linked_list(new_prefix, used_files, true);
 
+
+    buffer *tmp_output = malloc(sizeof(buffer));
+    tmp_output->text = malloc(sizeof(char)*255);
+    tmp_output->size = 0;
+    tmp_output->size_limit = 254;
+
     int return_val = EXIT_FAILURE;
     if (convert(input, tmp_output, guard, report_cycles, with_comments, max_depth, "", sections, used_files)) {
         FILE* output = fopen(argv[i], "w");
         if (output == NULL) {
             fprintf(stderr, "Could not open output file!\n");
         } else {
-            fclose(tmp_output);
-            tmp_output = fopen(tmp_output_prefix, "r");
-            file_copy(tmp_output, output);
+            fprintf(output, "%s", tmp_output->text);
             fclose(output);
             return_val = EXIT_SUCCESS;
             printf("Successfuly converted!\n");
         }
     }
 
+    free(tmp_output->text);
+    free(tmp_output);
     clear(used_files);
     clear(sections);
-    fclose(tmp_output);
-    remove(tmp_output_prefix);
-    if (prefix_is_mallocated) free(tmp_output_prefix);
     fclose(input);
 
     return return_val;
