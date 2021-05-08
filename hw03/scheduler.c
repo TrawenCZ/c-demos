@@ -112,6 +112,35 @@ enum push_result pusher(priority_queue *queue,
   return push_success;
 }
 
+
+enum push_result push_switch(priority_queue_item *pPushPosition, priority_queue *queue, bool empty, process_type process)
+{
+  unsigned int inputPriority = process.niceness * process.remaining_time;
+  if (pPushPosition == NULL) {
+    if (empty)
+      return pusher(queue, pPushPosition, process, false);
+    return pusher(queue, pPushPosition, process, true);
+  }
+
+  if (pPushPosition->process.niceness * pPushPosition->process.remaining_time >
+      inputPriority) {
+    return pusher(queue, pPushPosition, process, false);
+  } else {
+    unsigned int sourcePriority =
+        pPushPosition->process.niceness * pPushPosition->process.remaining_time;
+    while (inputPriority == sourcePriority &&
+           bit_count(pPushPosition->process.cpu_mask) < bit_count(process.cpu_mask)) {
+      pPushPosition = pPushPosition->next;
+      if (pPushPosition == NULL)
+        break;
+      sourcePriority = pPushPosition->process.niceness *
+                       pPushPosition->process.remaining_time;
+    }
+    return pusher(queue, pPushPosition, process, true);
+  }
+}
+
+
 enum push_result push_to_queue(priority_queue *queue, process_type process) {
   assert(queue != NULL);
   assert(process.niceness >= 10 && process.niceness < 50);
@@ -141,29 +170,7 @@ enum push_result push_to_queue(priority_queue *queue, process_type process) {
     return push_inconsistent;
   }
 
-  unsigned int inputPriority = process.niceness * process.remaining_time;
-  if (pPushPosition == NULL) {
-    if (empty)
-      return pusher(queue, pPushPosition, process, false);
-    return pusher(queue, pPushPosition, process, true);
-  }
-
-  if (pPushPosition->process.niceness * pPushPosition->process.remaining_time >
-      inputPriority) {
-    return pusher(queue, pPushPosition, process, false);
-  } else {
-    unsigned int sourcePriority =
-        pPushPosition->process.niceness * pPushPosition->process.remaining_time;
-    while (inputPriority == sourcePriority &&
-           bit_count(pPushPosition->process.cpu_mask) < bit_count(process.cpu_mask)) {
-      pPushPosition = pPushPosition->next;
-      if (pPushPosition == NULL)
-        break;
-      sourcePriority = pPushPosition->process.niceness *
-                       pPushPosition->process.remaining_time;
-    }
-    return pusher(queue, pPushPosition, process, true);
-  }
+  return push_switch(pPushPosition, queue, empty, process);
 }
 
 void pop_item(priority_queue *queue, priority_queue_item *item) {
