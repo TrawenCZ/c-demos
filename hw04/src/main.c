@@ -237,7 +237,6 @@ bool sectionize(FILE *input, buffer *output, char *prefix, linked_list *sections
 
 bool key_bind(FILE *input, buffer *output, linked_list *keys, char first_char) 
 {   
-    helper_printer(keys);
     linked_list_item *new_key = malloc(sizeof(linked_list_item));
     if (new_key == NULL) return malloc_failed();
     new_key->name = malloc(sizeof(char)*255);
