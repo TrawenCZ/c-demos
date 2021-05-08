@@ -95,15 +95,6 @@ void ignore_line(FILE *input)
     }
 }
 
-void helper_printer(linked_list *list)
-{
-    linked_list_item *pNode = list->top;
-    while (pNode != NULL) {
-        printf("%s\n", pNode->name);
-        pNode = pNode->next;
-    }
-}
-
 void clear(linked_list *list)
 {
     linked_list_item *pNode = list->top;
@@ -704,7 +695,6 @@ int main(int argc, char **argv)
             fprintf(output, "%s", tmp_output->text);
             fclose(output);
             return_val = EXIT_SUCCESS;
-            printf("Successfuly converted!\n");
         }
     }
 
