@@ -44,8 +44,10 @@ static void usage(FILE *output, const char *program)
             "\n"
             "\t-h\t--help\t\t\tShow this helpful message (and ends program)\n"
             "\t-d N\t--max-depth N\t\tSets maximum depth immersion limit [N]. ([N=0] = no immersion, negative N = no limit)\n"
-            "\t-g\t--include-guard\t\tPrint loaded sudoku without formatting\n"
-            "\t-r\t--report-cycles\t\tPrint loaded sudoku in ASCII grid\n"
+            "\t-g\t--include-guard\t\tProtects againts duplicate file copy.\n"
+            "\t-r\t--report-cycles\t\tReports and ends function if cycle in .include statements detected.\n"
+            "\t-c\t--with-comments\t\tKeeps blank linkes and comments in output file.\n"
+            "\n Arguments should be passed like on this pattern: ./program [options] [path to input file] [path to output file]\n"
             "\n";
 
     fprintf(output, help, program, program);
@@ -127,7 +129,7 @@ bool path_creator(char *raw_path, linked_list_item *output_path, int size_limit)
         return true;
     }
 
-    while (raw_path[i] != '/' && raw_path[i] != '\\' && i >= 0) {
+    while (i >= 0 && raw_path[i] != '/' && raw_path[i] != '\\') {
         i--;
     }
     while ((int) strlen(raw_path) > size_limit) {
