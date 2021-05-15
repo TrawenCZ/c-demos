@@ -497,10 +497,8 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
     if (new_path->name == NULL) {free(new_path); return malloc_failed(); }
     strcpy(new_path->name, path_prefix->name);
 
-    if (!is_include(input, new_path, strlen(path_prefix->name)) || used_files->size > max_depth) {
-        if (used_files->size > max_depth) {
-            fprintf(stderr, "Max depth exceeded! Try setting it higher for bigger tolerance.\n");
-        } else { fprintf(stderr, "Invalid .include statement in file.\n"); }
+    if (!is_include(input, new_path, strlen(path_prefix->name))) {
+        fprintf(stderr, "Invalid .include statement in file.\n");
         free(new_path->name);
         free(new_path);
         return false;
@@ -546,19 +544,28 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
     free(new_path);
 
     if (!push_to_linked_list(new_prefix, used_files, (guard || report_cycles))) {
-        if (report_cycles) {
+        if (guard) {
+            fclose(new_input);
+            free(new_path_prefix->name);
+            free(new_path_prefix);
+            return true;
+        } else if (report_cycles) {
             fprintf(stderr, "Cycle in .include statements detected!\n");
             fclose(new_input);
             free(new_path_prefix->name);
             free(new_path_prefix);
             return false;
-        } else if (guard) {
+        }
+    }
+
+    if (used_files->size > max_depth) {
+            fprintf(stderr, "Max depth exceeded! Try setting it higher for bigger tolerance.\n");
             fclose(new_input);
             free(new_path_prefix->name);
             free(new_path_prefix);
-            return true;
+            return false;
         }
-    }
+    
     if (!convert(new_input, output, guard, report_cycles, with_comments, max_depth, new_path_prefix, depth_limit, new_prefix->name, sections, used_files)) {
         fclose(new_input);
         free(new_path_prefix->name);
@@ -567,6 +574,8 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
     }
     if (!guard) {
         pop_from_linked_list(used_files);
+    } else {
+        used_files->size--;
     }
     free(new_path_prefix->name);
     free(new_path_prefix);
@@ -734,6 +743,7 @@ int main(int argc, char **argv)
     int *new_size = malloc(sizeof(int));
     to_prefix(argv[i-1], new_prefix, new_size, 0, false);
     push_to_linked_list(new_prefix, used_files, true);
+    used_files->size--;
     *new_size = *new_size - 1;
 
     linked_list_item *new_path = malloc(sizeof(linked_list_item));
