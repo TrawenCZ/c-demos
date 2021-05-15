@@ -1,0 +1,252 @@
+---
+title: "Cvičení 11: POSIX"
+layout: "seminar"
+authors:
+  - xjaros1
+use-mathjax: false
+publish: 1
+---
+
+V tomto cvičení si ukážeme, jak přistupovat k souborům v POSIXu.
+
+POSIX je rozhraní UN*Xových operačních systémů. Jedná se tedy o velmi
+nízkoúrovňové rozhraní, pomocí kterého je např. na Linuxu nebo macOS
+implementována standardní knihovna (`stdlib`).
+
+Na rozdíl od `stdlib`, kde hlavní identifikátor souboru je struktura `FILE`,
+používá POSIX pro přístup k souboru tzv. *file descriptory*, česky řečeno
+popisovače souborů.
+
+File descriptor je celé číslo, které odkazuje do tabulky otevřených souborů
+udržované operačním systémem a na základě popisovače požaduje po OS akci na
+souboru (např. čtení, zápis, přejmenování, smazání, ...).
+
+Pro přístup k souborům existují funkce:
+
+* `open` -> alternativa k `fopen`
+* `close` -> alternativa k `fclose`
+* `read` -> alternativa k `fread`
+* `write` -> alternativa k `fwrite`
+
+Přístup k souboru je tedy velmi podobný jako v `stdlib`, s tím rozdílem, že
+využití POSIXu nám umožňuje i další zásahy do souboru, jako je změna majitele,
+změna uživatele, čtení adresáře atd.
+
+[WARNING]
+====
+Po stažení kostry zjistíte, že tento úkol neobsahuje přímo projekt pro
+QtCreator, ale obyčejný `Makefile` pro překlad tohoto kódu.
+
+Doporučujeme vám pro psaní kódu používat terminálové rozhraní, protože se v něm
+bude kód lépe překládat a budete mít snazší přístup k dokumentaci. Nicméně, pokud
+nevěříte svým schopnostem práce v shellu, můžete si v QtCreatoru vytvořit vlastní
+projekt.
+====
+
+[NOTE]
+====
+Řešení všech úkolů pište do souboru `main.c`.
+====
+
+== Úkol 1: `cat`
+
+Upravte následující kód tak, aby používal POSIXové funkce pro přístup k
+souborům.
+
+[source,c]
+----
+#include <stdio.h>
+
+int main(int argc, char *argv[])
+{
+    if (argc != 2) {
+        fprintf(stderr, "Invalid amount of arguments\n");
+        return 1;
+    }
+
+    FILE *file = fopen(argv[1], "r");
+    if (file == NULL) {
+        perror(argv[1]);
+        return 1;
+    }
+
+    char buffer[1024] = { '\0' };
+    size_t size = 0;
+    while ((size = fread(buffer, 1, 1024, file)) > 0) {
+        fwrite(buffer, 1, size, stdout);
+    }
+
+    fclose(file);
+    return 0;
+}
+----
+
+Využijte manuálové stránky pro zjištění, jak se tyto funkce chovají: `open(2)`,
+`close(2)`, `read(2)`, `write(2)`. Pro otevření manuálové stránky využijte
+příkazu `man`, například pro manuál k `open` použijte příkaz `man 2 open`.
+Navíc upravte konstanty, které funkce `main()` vrací, na makra `EXIT_SUCCESS`
+a `EXIT_FAILURE`.
+
+[NOTE]
+====
+Všimněte si rozdílu v zadávaní módu. Na rozdíl od `stdlib` používá `open`
+číselné konstanty, které se kombinují pomocí bitového součtu. Například
+součet hodnot `O_WRONLY | O_CREAT | O_TRUNC` je ekvivalentní modifikátoru `w`
+funkce `fopen`.
+====
+
+[WARNING]
+====
+Dejte si pozor na možné návratové hodnoty funkce `read` – v případě chyby totiž
+vrací `-1`, což nelze reprezentovat pomocí typu `size_t`.
+====
+
+== Úkol 2: Informace o souboru
+
+Vaším úkolem je rozšířit předchozí program o výpis informací o souboru, které
+zjistíte pomocí funkce `fstat(2)` po vypsaní souboru. Informace zapište v
+následujícím formátu:
+
+....
+Velikost souboru:
+Datum posledniho pristupu:
+UID majitele:
+GID majitele:
+....
+
+Pro vypsání data použijte funkci `ctime(3)`.
+
+== Úkol 3: Refactoring
+
+Vytvořte funkce
+
+[source,c]
+----
+int print_file(const char *path);
+int print_stats(const char *path);
+----
+
+Do těchto funkcí přesuňte funkcionalitu vaší funkce `main`. Upravte váš program,
+aby přijímal z příkazové řádky přepínače `-s` a `-p`, které budou vždy jako
+první argument, a `1` až `n` souborů. Na základě zvoleného přepínače použijte
+nad danými soubory funkce:
+
+* `-s` `print_stats`
+* `-p` `print_file`
+
+Pokud funkce selže, pomocí `perror` vypište na `stderr` jaká chyba nastala a
+pokračujte dál. Nezapomeňte, že funkce `fstat` bere file descriptor, existuje
+však i funkce `stat`, která přijímá místo file descriptoru cestu k souboru.
+
+== Úkol 4: Výpis adresářů
+
+Nyní máte program, který dokáže vypsat statistiky a obsah daných souborů. Vaším
+úkolem bude rozšířit jeho funkcionalitu o práci nad adresáři.
+
+Vytvořte funkci
+
+[source,c]
+----
+int read_directory(const char *path, int (*func)(const char *));
+----
+
+Tato funkce přečte obsah zadaného adresáře – argument `path` – a na jednotlivé
+potomky aplikuje funkci `func`, pokud jsou soubory. Pokud nejsou, vypíše na
+standardní výstup informaci, že byl nalezen neregulární soubor (například
+adresář), a pokračuje dále bez zanoření.
+
+Budete potřebovat funkce `stat(2)`, `readdir(3)`, `opendir(3)`, `closedir(3)` a
+makra `S_ISREG` apod. Tato makra jsou popsaná v manuálové stránce `stat(2)`.
+
+Jednoduché procházení složky může vypadat například takto. Kód je převzatý z
+přednášky.
+
+[source,c]
+----
+#include <dirent.h>
+
+void PosixPrintFiles(const char* path) {
+    DIR *dir = NULL;
+    if ((dir = opendir(path)) != NULL) {                // connect to directory
+        struct dirent *dirEntry = NULL;
+        while ((dirEntry = readdir(dir)) != NULL) {     // obtain next item
+            printf("File %s\n", dirEntry->d_name);      // get d_name
+        }
+        closedir(dir);                                  // finish work with directory
+    }
+}
+----
+
+Mějte na paměti, že ve struktuře `dirent` je uložen pouze samotný název souboru,
+nikoliv jeho absolutní či relativní cesta.
+
+Na závěr rozšiřte svůj `main` o detekci adresáře nad argumenty z příkazové
+řádky. Pokud byl na příkazové řádce předán adresář, váš program vypíše:
+
+....
+Skenovani adresare %s
+--------------------------------
+/* obsah vypisu, zavolani funkce read_directory */
+--------------------------------
+....
+
+== Teorie - Rozdíl mezi oddíly manuálových stránek
+
+Jistě jste si všimli, že v průběhu tohoto cvičení nekonzistentně vybíráme oddíly
+manuálových stránek zdánlivě nahodile. Jaký je tedy pro to důvod?
+
+Obecně manuálové stránky jsou rozděleny do oddílů dle toho, co popisují. V našem
+případě jsou použity následující oddíly:
+
+* Oddíl 2., který popisuje systémová volání,
+* Oddíl 3., který popisuje funkce POSIX a standardní knihovny.
+
+Důvodem, proč v rámci tohoto cvičení nepoužíváme pouze třetí oddíl, ačkoliv
+například `man 3 open` je taktéž validní, je detail popisu funkcí. V tomto
+případě totiž třetí oddíl pouze popisuje chování funkcí dle standardu jazyka C
+respektive dle POSIXu, což je sice hezké, ale pro konkrétní použití je vhodné
+mít detailní popis chování funkce na cílové platformě. Porovnejme například
+rozdíl popisu funkce `stat` ve třetím oddíle:
+
+....
+DESCRIPTION
+       Refer to fstatat().
+....
+
+která vypadá následovně:
+
+....
+DESCRIPTION
+       The stat() function shall obtain information about the named file and write it to the area pointed to by the buf argument. The path argument points to a pathname naming a file. Read, write, or exe‐
+       cute  permission of the named file is not required. An implementation that provides additional or alternate file access control mechanisms may, under implementation-defined conditions, cause stat()
+       to fail. In particular, the system may deny the existence of the file specified by path.
+
+       If the named file is a symbolic link, the stat() function shall continue pathname resolution using the contents of the symbolic link, and shall return information pertaining to the  resulting  file
+       if the file exists.
+
+       The buf argument is a pointer to a stat structure, as defined in the <sys/stat.h> header, into which information is placed concerning the file.
+....
+
+a ve druhém oddíle:
+
+....
+DESCRIPTION
+       These  functions  return  information  about  a file, in the buffer pointed to by statbuf.  No permissions are required on the file itself, but—in the case of stat(), fstatat(), and lstat()—execute
+       (search) permission is required on all of the directories in pathname that lead to the file.
+
+       stat() and fstatat() retrieve information about the file pointed to by pathname; the differences for fstatat() are described below.
+
+       lstat() is identical to stat(), except that if pathname is a symbolic link, then it returns information about the link itself, not the file that the link refers to.
+
+       fstat() is identical to stat(), except that the file about which information is to be retrieved is specified by the file descriptor fd.
+
+   The stat structure
+       All of these system calls return a stat structure, which contains the following fields:
+
+           struct stat {
+               dev_t     st_dev;         /* ID of device containing file */
+// and many more
+....
+
+Jak jste si jistě všimli, druhý oddíl obsahuje daleko přesnější popis funkcí pro
+jejich použití, protože je vázán již na implementaci POSIX v Linuxu.

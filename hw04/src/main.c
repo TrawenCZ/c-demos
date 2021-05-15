@@ -417,7 +417,11 @@ bool to_prefix_rec(char *path, int index, linked_list *prefixed_path, int depth_
             prefixed_path_item->name[size_counter] = path[index];  
         } else {
             only_dot = false;
-            prefixed_path_item->name[size_counter] = path[index];
+            if (strchr(ALLOWED_CHARS, path[index]) != NULL) {
+                prefixed_path_item->name[size_counter] = path[index];
+            } else {
+                prefixed_path_item->name[size_counter] = '?';
+            }
         }
     size_counter++;
     index++;
@@ -532,7 +536,6 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
         to_prefix(new_path->name + strlen(path_prefix->name), new_prefix, NULL, depth_limit, true);   //Im really sorry but at this point Im desperate at midnight :(
     }
 
-
     linked_list_item *new_path_prefix = malloc(sizeof(linked_list_item));
     if (new_path_prefix == NULL) { free(new_path->name); free(new_path); return malloc_failed();}
     new_path_prefix->name = malloc(sizeof(char)*255);
@@ -541,7 +544,6 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
 
     free(new_path->name);
     free(new_path);
-
 
     if (!push_to_linked_list(new_prefix, used_files, (guard || report_cycles))) {
         if (report_cycles) {
@@ -563,7 +565,9 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
         free(new_path_prefix);
         return false;
     }
-    pop_from_linked_list(used_files);
+    if (!guard) {
+        pop_from_linked_list(used_files);
+    }
     free(new_path_prefix->name);
     free(new_path_prefix);
     fclose(new_input);
