@@ -300,13 +300,13 @@ bool key_bind(FILE *input, buffer *output, linked_list *keys, char first_char)
         free(new_key);
         return false;
     }
+    new_key->name[size_counter] = '\0';
 
     if (!push_to_linked_list(new_key, keys, true)) {
         fprintf(stderr, "Key already in section!\n");
         return false;
     }
     
-    new_key->name[size_counter] = '\0';
     if (!bsprintf(output, new_key->name + 1)) return false;
     if (!bsprintf(output, " = ")) return false;
 
