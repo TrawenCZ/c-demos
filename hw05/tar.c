@@ -7,6 +7,8 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <pwd.h>
+#include <grp.h>
 
 typedef struct dynamic_list
 {
@@ -81,24 +83,46 @@ void clear(dynamic_list *list) {
     free(list);
 }
 
-void split_to_prefix(char *input, char *prefix, char *file)
+void split_to_prefix(char *input, char **prefix, char **file_name)
 {
     int pointer = strlen(input) - 100;
     while (input[pointer] != '/' && input[pointer] == '\0') {
         pointer++;
     }
     if (input[pointer] == '\0') {
-        strncpy(prefix, input, 155);
+        strncpy(*prefix, input, 155);
         prefix[pointer - 1] = '\0';
-        file = "";
+        *file_name = "";
         return;
     }
-    strncpy(prefix, input, 155);
+    strncpy(*prefix, input, 155);
     prefix[pointer - 1] = '\0';
-    file = input[pointer + 1];
+    *file_name = input + pointer + 1;
 }
 
-bool load_info(dynamic_list *list, bool should_print, char *output)
+char* to_octal(int num, int size_of_output, bool control_count, char **to_free)
+{
+    int pointer;
+    char *output = malloc(size_of_output);
+    *to_free = output;
+    if (control_count) {
+        output[size_of_output - 1] = ' ';
+        output[size_of_output - 2] = '\0';
+        pointer = size_of_output - 3;
+    } else {
+        output[size_of_output - 1] = '\0';
+        pointer = size_of_output - 2;
+    }
+    
+    while (num > 0) {
+        output[pointer] = num % 8;
+        num /= 8;
+    }
+    return output;
+
+}
+
+bool load_info(dynamic_list *list, bool should_print, int output)
 {   
     struct stat path_stat;
     for (int i = 0; i < list->size; i++) {
@@ -113,19 +137,61 @@ bool load_info(dynamic_list *list, bool should_print, char *output)
             continue;
         }
 
-        char new_header[512] = {0};
+        char *new_header = calloc(sizeof(char), 512);
+        char *to_free[6];
         
         char *prefix = malloc(155);
         prefix[0] = '\0';
         char *file_name = list->data[i];
         if (strlen(list->data[i]) > 99) {
-            split_to_prefix(list->data[i], prefix, file_name);
+            split_to_prefix(list->data[i], &prefix, &file_name);
         }
-        
-        strcpy(new_header[0], file_name);
 
+        strcpy(&new_header[0], file_name);
+        strcpy(&new_header[100], to_octal(path_stat.st_mode, 8, false, &to_free[0]));
+        strcpy(&new_header[108], to_octal(path_stat.st_uid, 8, false, &to_free[1]));
+        strcpy(&new_header[116], to_octal(path_stat.st_gid, 8, false, &to_free[2]));
+        strcpy(&new_header[124], to_octal(path_stat.st_size, 12, false, &to_free[3]));
+        strcpy(&new_header[136], to_octal(path_stat.st_mtim.tv_sec, 12, false, &to_free[4]));
+        for (int i = 148; i < 156; i++) {
+            new_header[i] = ' ';
+        }
+        if (is_regular_directory(list->data[i])) new_header[156] = '5';
+        else new_header[156] = '0';
+        strcpy(&new_header[257], "ustar");
+        new_header[263] = '0'; new_header[264] = '0';
+        strcpy(&new_header[265], getpwuid(path_stat.st_uid)->pw_name);
+        strcpy(&new_header[297], getgrgid(path_stat.st_gid)->gr_name);
+        new_header[329] = 0;
+        new_header[337] = 0;
+        strcpy(&new_header[345], prefix);
+        free(prefix);
 
+        unsigned int control_count = 0;
+        for (int i = 0; i < 512; i++) {
+            control_count += (unsigned int) new_header[i];
+        }
+        strcpy(&new_header[148], to_octal(control_count, 8, true, &to_free[5]));
+
+        write(output, new_header, 512);
+
+        for (int i = 0; i < 6; i++) {
+            free(to_free[i]);
+        }
+
+        if (new_header[156] == '5') continue;
+
+        char *buffer = malloc(path_stat.st_size);
+        if (buffer == NULL) {
+            fprintf(stderr, "Could not allocate enough memory for file '%s' content!\n", list->data[i]);
+            continue;
+        }
+        read(file, buffer, path_stat.st_size);
+        write(output, buffer, path_stat.st_size);
+        char *empty_space = calloc(sizeof(char), path_stat.st_size % 512);
+        write(output, empty_space, path_stat.st_size % 512);
     }
+    return true;
 }
 
 
@@ -165,7 +231,6 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    struct stat path_stat;
     dynamic_list *todo_list = malloc(sizeof(dynamic_list));
     todo_list->size = 0;
     todo_list->limit_size = 20;
