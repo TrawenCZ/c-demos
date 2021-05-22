@@ -115,8 +115,13 @@ char* to_octal(int num, int size_of_output, bool control_count, char **to_free)
     }
     
     while (num > 0) {
-        output[pointer] = num % 8;
+        output[pointer] = num % 8 + 48;
         num /= 8;
+        pointer--;
+    }
+    while (pointer >= 0) {
+        output[pointer] = '0';
+        pointer--;
     }
     return output;
 
@@ -172,14 +177,16 @@ bool load_info(dynamic_list *list, bool should_print, int output)
             control_count += (unsigned int) new_header[i];
         }
         strcpy(&new_header[148], to_octal(control_count, 8, true, &to_free[5]));
+        new_header[155] = ' ';
 
         write(output, new_header, 512);
 
         for (int i = 0; i < 6; i++) {
             free(to_free[i]);
         }
+        free(new_header);
 
-        if (new_header[156] == '5') continue;
+        if (is_regular_directory(list->data[i])) continue;
 
         char *buffer = malloc(path_stat.st_size);
         if (buffer == NULL) {
@@ -190,6 +197,8 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         write(output, buffer, path_stat.st_size);
         char *empty_space = calloc(sizeof(char), path_stat.st_size % 512);
         write(output, empty_space, path_stat.st_size % 512);
+        free(buffer);
+        free(empty_space);
     }
     return true;
 }
@@ -248,12 +257,19 @@ int main(int argc, char **argv)
     }
     */
 
-    int output = open(argv[2], O_WRONLY);
+    int output = open(argv[2], O_CREAT | O_WRONLY, 0666);
     if (output == -1) {
         fprintf(stderr, "Cannot open given output!\n");
         return main_failed(todo_list);
     }
     if (create && !load_info(todo_list, print, output)) return main_failed(todo_list); // argv[2] is output file
+    char *ender = calloc(sizeof(char), 1024);
+    if (ender == NULL) {
+        fprintf(stderr, "Could not allocate enough memory for ending zero sequence.\n");
+        return main_failed(todo_list);
+    }
+    write(output, ender, 1024);
+    free(ender);
 
     clear(todo_list);
     return EXIT_SUCCESS;
