@@ -131,7 +131,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
 {   
     struct stat path_stat;
     for (int i = 0; i < list->size; i++) {
-        if (should_print) puts(list->data[i]);
+        if (should_print) fprintf(stderr, "%s\n", list->data[i]);
         if (stat(list->data[i], &path_stat) == -1) {
             fprintf(stderr, "Could not access file '%s'\n", list->data[i]);
             continue;
@@ -186,7 +186,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         }
         free(new_header);
 
-        if (is_regular_directory(list->data[i])) continue;
+        if (is_regular_directory(list->data[i]) || path_stat.st_size == 0) continue;
 
         char *buffer = malloc(path_stat.st_size);
         if (buffer == NULL) {
@@ -195,8 +195,9 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         }
         read(file, buffer, path_stat.st_size);
         write(output, buffer, path_stat.st_size);
-        char *empty_space = calloc(sizeof(char), path_stat.st_size % 512);
-        write(output, empty_space, path_stat.st_size % 512);
+
+        char *empty_space = calloc(sizeof(char), 512 - path_stat.st_size % 512);
+        write(output, empty_space, 512 - path_stat.st_size % 512);
         free(buffer);
         free(empty_space);
     }
