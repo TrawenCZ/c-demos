@@ -1,0 +1,646 @@
+---
+title: "HW05: Tar"
+layout: "homework"
+list-of-files: ["*.c", "*.h"]
+solution-path: /home/kontr/pb071/hw05/tar
+publish: now
+deadline-early: 2021-05-27 24:00
+deadline-final: 2021-05-30 24:00
+authors:
+  - xpiatka
+---
+
+[#intro]
+== Predstavenie úlohy
+
+Formát _tar_ slúži na zabalenie viacerých súborov do jedného súboru — archívu.
+Dnes sa často používa v spojení s rôznymi kompresnými algoritmami ako
+alternatíva k formátu *ZIP*.
+
+Názov _tar_ vznikol z "**t**ape **ar**chiver", čo nám prezrádza dôvod jeho
+vzniku.
+Mechaniky na magnetické pásky umožňovali zápis dát na pásku takým
+spôsobom, že počítač mechanike posielal súvislý prúd dát, ktoré sa priamo
+zapisovali na pásku.
+Pri zápise musela byť navyše páska „rozbehnutá“ na správnu rýchlosť, a preto sa
+dáta zapisovali a čítali po väčších kúskoch naraz.
+Na uchovanie viacerých súborov spolu s nejakými metadátami (napríklad názov
+súboru) je potrebné tieto súbory aj ich metadáta nejakým spôsobom transformovať
+do súvislého kusu dát.
+Na klasických pevných diskoch sa na tento účel používajú rôzne súborové systémy,
+ako napríklad FAT32, EXT4, NTFS.
+Tieto súborové systémy však uprednostňujú flexibilitu modifikácie uložených
+súborov a rátajú s relatívne rýchlym náhodným prístupom; posunúť čítaciu
+hlavicu disku je rýchlejšie ako pretočiť 300 metrov pásky.
+Formát _tar_ je preto pomerne jednoduchý, spočíva len v prilepení hlavičky
+obsahujúcej metadáta pred každý súbor.
+Súbory s hlavičkami sú potom jednoducho zlepené za sebou, pričom sa k nim
+pridávajú „vypchávky“ (*padding*) tak, aby každý súbor začínal na správnom
+zarovnaní.
+
+[#assignment]
+== Zadanie
+
+Vašou úlohou bude implementovať zjednodušenú verziu programu
+`https://man.archlinux.org/man/tar.1[tar(1)]`, ktorý bude vedieť vytvárať a
+čítať _tar_ archívy.
+
+[#assignment-tar]
+=== Štruktúra archívu TAR
+
+Tento formát je k dispozícii v rôznych verziách, ktoré medzi sebou nemusia byť
+kompatibilné.
+V tejto úlohe sa budeme zaoberať variantom USTar (POSIX.1-1988).
+
+Archív pozostáva z postupnosti hlavičiek záznamov adresárov a súborov.
+Ak sa jedná o záznam súboru, je jeho obsah pripojený bezprostredne za touto
+hlavičkou záznamu.
+Samotný archív nemá na začiatku pred prvou hlavičkou záznamu žiadne extra dáta
+a ani žiadne
+https://en.wikipedia.org/wiki/Magic_number_(programming)[magické čísla], tie sú
+totiž súčasťou každej hlavičky záznamu.
+
+Začiatok každej hlavičky musí byť zarovnaný na 512 bajtov, t. j. začiatok
+hlavičky je na pozícii `n * 512`, kde n je nejaké nezáporné celé číslo.
+Za účelom tohto zarovnania môže byť potrebné za obsah súborov, ktorých veľkosť
+nie je celočíselne deliteľná 512, doplniť vypchávku pozostávajúcu z nulových
+bajtov (ktorých môže byť maximálne 511).
+
+Hlavička záznamu má veľkosť 512 bajtov a obsahuje informácie znázornené v
+následujúcej tabuľke. Jednotlivé položky sú vysvetlené detailnejšie nižšie.
+
+[cols=">1,>1,2",role="table table-sm"]
+|===
+|Offset od začiatku hlavičky|Dĺžka poľa|Obsah poľa
+
+|0
+|100
+|Názov súboru alebo adresára
+
+|100
+|8
+|Mód súboru alebo adresára (prístupové práva)
+
+|108
+|8
+|Číselné id vlastníka
+
+|116
+|8
+|Číselné id skupiny
+
+|124
+|12
+|Veľkosť súboru
+
+|136
+|12
+|Čas poslednej modifikácie
+
+|148
+|8
+|Kontrolný súčet hlavičky
+
+|156
+|1
+|Príznaky typu
+
+|157
+|100
+|Názov odkazovaného súboru
+
+|257
+|6
+|Magické čísla ("ustar\0") (`\0` značí nulový bajt)
+
+|263
+|2
+|USTar verzia (v tejto úlohe "00")
+
+|265
+|32
+|Textové meno vlastníka
+
+|297
+|32
+|Textové meno skupiny
+
+|329
+|8
+|Major číslo zariadenia
+
+|337
+|8
+|Minor číslo zariadenia
+
+|345
+|155
+|Prefix názvu súboru alebo adresára
+
+|===
+
+Zvyšok hlavičky je vyplnený nulovými bajtmi.
+
+Pre číselné hodnoty v tejto hlavičke platí:
+
+* Sú zapisované textovo v **oktálnom** zápise, nasledovanom nulovým bajtom.
+* Číselné hodnoty vždy zaberajú celé pole, a za týmto účelom sa vypĺňajú
+  zľava znakom `0`.
+
+[example]
+Napríklad číslo 19 sa do poľa dĺžky 8 zapíše ako reťazec `"0000023\0"`.
+
+:fn-posix-format-exception: footnote:[Toto je mierne zjednodušenie oproti \
+skutočnému tar, ktorý pre niektoré polia umožňuje výnimku.]
+
+Textové polia sú vždy{fn-posix-format-exception} ukončené nulovým bajtom
+a prípadné nevyužité miesto bude vyplnené nulovými bajtmi.
+Do poľa s veľkosťou 100 znakov je teda možné reálne zapísať 99 znakov.
+
+Koniec archívu je označený oblasťou nulových bajtov s dĺžkou 2 hlavičiek (1024
+bajtov).
+
+[#assignment-tar-name]
+==== Názov položky
+
+Názov položky je zložený z relatívnej cesty od koreňa archívu a samotného názvu
+súboru či adresára (napr. `adresár/subor.txt`).
+V hlavičke záznamu sú pre uloženie názvu dve polia s veľkosťami 100 (_názov_)
+a 155 znakov (_prefix_).
+
+* Ak sa názov zmestí do poľa _názov_, tak sa využije len to a _prefix_
+  ostane nevyužité.
+* V prípade, že je názov dlhší ako kapacita poľa _názov_, je názov rozdelený na
+  znaku `/`:
+  ** Časť názvu pred týmto znakom sa zapíše do poľa
+     _prefix_ a časť po tomto znaku sa zapíše do poľa _názov_.
+  ** Znak `/`, na ktorom dôjde k deleniu, sa vyberie tak, aby sa pole
+     _názov_ čo najviac zaplnilo.
+  ** Samotný znak `/`, na ktorom došlo k deleniu, sa nezapíše nikam.
+* Názvy položiek typu adresár obsahujú v názve koncové `/`
+  (napr `adresár₁/adresár₂/`).
+
+[example]
+====
+Napríklad názov
+
+----
+nejaká/veľmi/dlhá/cesta/k/súboru/ktorá/sa/nezmestí/do/poľa/názov/a/preto/je/nutné/ju/rozdeliť/na/názov/a/prefix/súbor.txt
+----
+
+sa podľa pravidiel vyššie rozdelí takto:
+
+----
+prefix: nejaká/veľmi/dlhá/cesta/k/súboru
+názov:  ktorá/sa/nezmestí/do/poľa/názov/a/preto/je/nutné/ju/rozdeliť/na/názov/a/prefix/súbor.txt
+----
+====
+
+NOTE: Ak je _tar_ pri vytváraní archívu volaný s cestami obsahujúcimi `./` na
+začiatku, tak aj názov položky bude začínať s `./`.
+T. j. ak zavoláme `tar cv archive.tar ./directory`, tak budú položky ukladané ako
+`./directory/somefile`.
+
+[#assignment-tar-mode]
+==== Mód súboru
+
+Mód súboru obsahuje informácie o prístupových právach súboru.
+Táto informácia je obsiahnutá v štruktúre `stat` v položke `st_mode`.
+Jedná sa o číselnú hodnotu, takže bude v hlavičke uložená oktálne, ako bolo
+popísané vyššie.
+Do archívu ukladajte len spodných 9 bitov, ktoré obsahujú informáciu o
+prístupových právach.
+
+[#assignment-tar-uid-gid]
+==== Vlastník a skupina
+
+:fn-missing-user: footnote:[To sa môže stať napríklad vtedy, ak používateľ \
+prestane existovať, alebo prenesieme archív na iný počítač.]
+
+Prístupové práva k súborom sa riadia na základe vlastníka daného súboru, a
+skupiny, ku ktorej súbor patrí.
+Jednotliví používatelia a skupiny sú identifikovaní pomocou identifikačného
+čísla.
+Hlavička záznamu v archíve obsahuje tieto identifikačné čísla, ako aj textové
+meno vlastníka (_login_) a skupiny.
+V prípade, že sa textové meno nepodarí zistiť{fn-missing-user}, bude dané
+textové pole prázdne.
+
+[#assignment-tar-size]
+==== Veľkosť súboru
+
+Toto pole obsahuje veľkosť súboru v bajtoch. V prípade adresárov bude uvedená
+veľkosť 0.
+
+[#assignment-tar-mtime]
+==== Čas poslednej modifikácie
+
+Toto pole obsahuje čas poslednej modifikácie.
+Tento údaj je vyjadrený ako počet sekúnd od polnoci 1. januára 1970 v časovom
+pásme UTC.
+Táto informácia je k dispozícii v položke `st_mtime` štruktúry `stat`.
+
+[#assignment-tar-link-name]
+==== Názov odkazovaného súboru
+
+Textové pole, v tejto úlohe bude prázdne.
+Používa sa na uchovanie názvu odkazovaného súboru v prípade, že sa jedná o
+záznam s príznakom typu _link_.
+
+[#assignment-tar-checksum]
+==== Kontrolný súčet
+
+Hlavička obsahuje aj jednoduchý kontrolný súčet.
+Táto hodnota sa počíta ako súčet všetkých 512 bajtov hlavičky, pričom sú tieto
+bajty interpretované ako hodnota bez znamienka.
+Keďže je pole obsahujúce kontrolný súčet súčasťou dát, z ktorých sa tento súčet
+počíta, je počas výpočtu toto pole brané ako osem ASCII medzier.
+
+Pri kontrolnom súčte je drobný rozdiel v tom, ako je toto pole ukončené — toto
+pole je ukončené nulovým bajtom a znakom medzery (t. j. predstavte si ``"\0 "``,
+aj keď to nie je úplne rozumný reťazec).
+Na samotnú hodnotu teda ostáva 6 číslic v osmičkovej sústave.
+Pri jeho výpočte preto použite dátový typ, ktorý dokáže uchovávať maximálnu
+hodnotu, ktorá sa dá takto zapísať.
+
+[#assignment-tar-flags]
+==== Príznaky typu
+
+Toto pole obsahuje informáciu o tom, čo tento záznam vlastne reprezentuje.
+Aj keď štandard USTar podporuje aj zaujímavejšie typy záznamov, v tejto
+úlohe sa budeme zaoberať len záznamami pre obyčajné súbory a adresáre.
+Prípustné hodnoty tohto poľa v tejto úlohe budú preto len:
+
+[cols=">1,5", role="table table-sm"]
+|===
+|Príznak|Význam
+
+|`'0'`
+|Obyčajný súbor
+
+|`'5'`
+|Adresár
+
+|`'x'`
+|Rozšírujúca hlavička (bonus)
+
+|===
+
+[#assignment-tar-devno]
+==== Major a minor čísla zariadenia
+
+V UNIX systéme majú súbory reprezentujúce zariadenia priradené major a minor číslo.
+V tejto úlohe sa týmito údajmi zaoberať nebudeme a obidve čísla budú nastavené
+na hodnotu 0.
+
+[#requirements]
+== Požiadavky
+
+Naozajstný _tar_ podporuje také veľké množstvo prepínačov, že na jeho účet
+vznikli https://xkcd.com/1168/[rôzne vtipy]. V tejto úlohe sa obmedzíme
+len na pár z nich:
+
+`c`::
+Príkaz na vytvorenie nového archívu.
+
+`x`::
+Príkaz na extrakciu archívu.
+
+`v`::
+Počas behu programu bude na štandardný **chybový** výstup vypísaný názov
+práve spracúvanej položky, každá na samostatnom riadku.
+
+Jednoznakové prepínače sa budú zadávať spolu bez medzery a bez znaku `-`
+(napr. `tar xv archive.tar`) a budú vždy zadané pred cestami súborov na
+zabalenie, alebo archívu na rozbalenie.
+Prepínače `c` a `x` nie je možné kombinovať.
+
+V prípade neplatného prepínača alebo neplatnej kombinácie prepínačov program
+skončí s chybovou správou na chybovom výstupe a nenulovým návratovým kódom.
+
+Ak počas behu programu dôjde pri spracovaní nejakého súboru alebo adresára ku chybe
+(nedostatočné práva, príliš dlhý názov položky, súbor už existuje a podobne),
+program vypíše na **chybový** výstup správu na jednom riadku, a táto položka
+sa preskočí.
+Pri použití prepínača `v` bude táto chyba vypísaná až po vypísaní riadku s
+názvom položky.
+Ak bola nejaká položka kvôli chybe preskočená, bude návratový kód programu na
+konci nenulový.
+
+[#requirements-create]
+=== Vytvorenie nového archívu
+
+Pri vytváraní archívu bude po prepínačoch zadaný názov archívu, za ktorým bude
+nasledovať ľubovoľný **nenulový** počet súborov a adresárov:
+
+[source]
+----
+tar c ARCHIVE FILE₁ [FILE₂ …]
+tar cv ARCHIVE FILE₁ [FILE₂ …]
+----
+
+V prípade adresárov dochádza k ich zabaleniu vrátane všetkých podadresárov a
+bežných súborov (špeciálne súbory, napr. rúry a sokety, sa ignorujú).
+Symbolické odkazy budú spracované ako cieľ týchto odkazov (t.j. nepotrebujú
+žiadne špeciálne ošetrenie, `stat` vráti informácie o odkazovanom súbore).
+
+Pri pokuse o vytvorenie prázdneho archívu (napríklad aj kvôli preskočeniu
+špeciálnych súborov) program skončí s nenulovým návratovým kódom a
+správou na štandardnom **chybovom** výstupe.
+
+[TIP]
+====
+* Na prechádzanie adresárovej štruktúry môžete použiť funkcie
+  `https://man.archlinux.org/man/opendir.3[opendir(3)]` a
+  `https://man.archlinux.org/man/readdir.3.en[readdir(3)]`.
+
+* Údaje o súboroch
+  získate pomocou `https://man.archlinux.org/man/stat.2[stat(2)]`.
+
+* Textové mená užívateľov a skupín je možné získať pomocou
+  `https://man.archlinux.org/man/getpwuid.3[getpwuid(3)]` a
+  `https://man.archlinux.org/man/getgrnam.3[getgrnam(3)]`.
+====
+
+Archív vytvorte s právami `666` so zohľadnením `umask` (viď poznámku v
+"Rozbalenie archívu").
+
+[CAUTION]
+====
+Jedotlivé položky do archívu ukladajte v preorder poradí. T. j. pri štruktúre:
+----
+directory_D
+    |-file_e
+
+directory_A
+    |-file2
+    |-file1
+    |-directory_B
+    |    |-file_c
+    |    |-file_a
+    |    |-file_b
+    |
+    |-directory_C
+         |-file_d
+
+----
+bude po zavolaní `tar cv test.tar directory_D directory_A` na štandardnom
+chybovom výstupe:
+----
+directory_A/
+directory_A/directory_B/
+directory_A/directory_B/file_a
+directory_A/directory_B/file_b
+directory_A/directory_B/file_c
+directory_A/directory_C/
+directory_A/directory_C/file_d
+directory_A/file1
+directory_A/file2
+directory_D/
+directory_D/file_e
+----
+
+Poradie položiek v rámci jedného adresára bude lexikograficky zoradené.
+====
+
+[#requirements-extract]
+=== Rozbalenie archívu
+
+----
+tar x ARCHIVE
+tar xv ARCHIVE
+----
+
+Pri rozbaľovaní archívu bude rozbaleným súborom a adresárom obnovený mód súboru
+a čas poslednej modifikácie.
+
+[TIP]
+Na zapísanie týchto údajov môžete využiť funkcie
+`https://man.archlinux.org/man/chmod.2[chmod(2)]` a
+`https://man.archlinux.org/man/utime.2[utime(2)]`, prípadne
+`https://man.archlinux.org/man/utimensat.2.en[utimensat(2)]`.
+
+[CAUTION]
+Vlastníka a skupinu pri rozbaľovaní *nenastavujte*.
+
+Aby ste si pri implementácii omylom neprepísali nejaké súbory, bude program
+pokus o rozbalenie súboru, ktorý už existuje, brať ako chybu.
+Toto však neplatí pre adresáre. Ak adresár s daným názvom už existuje, tak sa
+daný záznam typu `5` potichu preskočí a pokračuje sa v rozbaľovaní.
+
+Archív môže obsahovať súbory v podadresároch, pre ktoré archív neobsahuje
+samostatné záznamy typu `5`.
+V takomto prípade sa tieto podadresáre vytvoria podľa potreby s prístupovými
+právami `777`.
+To znamená, že ak narazíme na záznam s cestou `dir1/dir2/file.txt` môže byť
+nutné adresáre `dir1` a `dir1/dir2` vytvoriť, ak ešte neexistujú.
+
+[CAUTION]
+====
+Prístupové práva vytvorených súborov a adresárov nastavte tak, aby
+bola zohľadnená maska `https://cs.wikipedia.org/wiki/Umask[umask]`.
+
+Toto sa dá docieliť použitím funkcií
+`https://man.archlinux.org/man/creat.2[creat(2)]` a
+`https://man.archlinux.org/man/mkdir.2[mkdir(2)]`, ktoré automaticky zadané
+práva podľa tejto masky upravia.
+====
+
+Pri rozbaľovaní bude program kontrolovať kontrolný súčet každého záznamu.
+V prípade, že kontrolný súčet nebude súhlasiť, nemôžeme veriť veľkosti
+súboru v hlavičke, a teda nemáme možnosť určit, kde začína nasledujúca hlavička.
+Preto program vypíše chybu na jednom riadku na chybový výstup a (po uvoľnení
+zdrojov) okamžite skončí s nenulovým návratovým kódom.
+
+[#bonus]
+== Bonusy
+
+Bonusové rozšírenia pridávajú dva dlhé prepínače, ktoré musia nasledovať
+po jednoznakových:
+
+----
+tar ‹jednoznakové prepínače› ‹dlhé prepínače› ARCHIVE FILE₁ […]
+----
+
+napríklad
+
+----
+tar cv --pax --null-character=. archive.tar …
+----
+
+[#bonus-null-character]
+=== Nahradenie nulových bajtov (0,5 bodu)
+
+[TIP]
+Toto bonusové rozšírenie odporúčame implementovať, aby ste mohli svoje
+archívy porovnávať textovo.
+
+Všetky údaje v hlavičkách archívu _tar_ sú reprezentované textovo.
+To znamená, že ak do archívu zabalíme len textové súbory, bude celý archív
+textový súbor, ktorý je možné jednoducho prehliadať textovým editorom… až na
+nulové bajty, ktoré textové editory často mätú.
+Implementáciou tohto rozšírenia si uľahčíte porovnávanie výstupu svojej
+implementácie voči vzorovej implementácii, ak na to nechcete používať HEX
+editor.
+
+Úlohou je implementovať prepínač `--null-character=<chr>`, ktorý spôsobí, že
+pri vytváraní archívu sa bude v hlavičkách a vypchávkach používať namiesto
+nulových bajtov zadaný znak.
+Na rozbaľovanie nemá tento prepínač žiaden vplyv, program nemusí vedieť takto
+vytvorené archívy rozbaľovať. Kontrolný súčet v hlavičkách bude rovnaký, ako
+keby hlavička používala nulové bajty.
+
+[#bonus-pax-headers]
+=== Pax Headers (2 body)
+
+Štandard USTar má množstvo obmedzení, ktoré spôsobujú, že pre moderné využitie
+môže byť nepraktický.
+Okrem limitu na maximálnu dĺžku názvov a používateľských mien spôsobuje fixná
+dĺžka polí v hlavičke napríklad aj to, že maximálna veľkosť súboru v archíve
+je okolo 8GB.
+
+Na odstránenie týchto limitácií bola v roku 2001 štandardizovaná nová verzia
+(POSIX.1-2001/pax).
+Tento štandard je spätne kompatibilný so štandardom USTar, takže archívy
+zabalené pomocou tohto novšieho štandardu je možné rozbaliť aj pomocou starších
+programov kompatibilných so štandardom USTar.
+
+Toto rozšírenie spočíva v pridaní nového záznamu obsahujúci rozširujúcu
+hlavičku pred záznam samotného súboru, ktorý ostáva rovnaký ako pri USTar.
+Rozširujúca hlavička je uložená ako súbor s rovnakým názvom, medzi cestu
+a názov sa však navyše pridá adresár `PaxHeaders` (príklad nižšie).
+Táto hlavička je uložená v archíve tak, ako každý iný súbor (staršie programy
+ktoré tento štandard nepoznajú vám pri rozbalení vybalia aj adresár PaxHeaders
+so súbormi rozširujúcich hlavičiek), s tým rozdielom, že príznak typu záznamu
+je nastavený na hodnotu `x`.
+
+Obsah tejto hlavičky je textový a obsahuje položky typu kľúč=hodnota.
+Každý kľúč s hodnotou je zapísaný na vlastnom riadku.
+Formát tohto riadku je `<dĺžka> <kľúč>=<hodnota>\n`, kde `<dĺžka>` je dĺžka
+celého riadku vrátane znaku konca riadku a samotnej dĺžky.
+Číselné hodnoty sú v tomto prípade reprezentované
+v decimálnej sústave.
+
+Bonusovou úlohou je implementácia tohto rozšírenia tak, aby dokázalo zabaliť a
+rozbaliť archívy s rozširujúcou hlavičkou, ktorá bude obsahovať čas poslednej
+modifikácie s presnosťou jemnejšou ako celá sekunda.
+Na uloženie tohto času sa používa položka s kľúčom `mtime`.
+
+Riadok v rozširujúcej hlavičke potom vyzerá napríklad takto:
+
+[example]
+====
+Ak zabalíme súbor `skola/cecko/hw1.c`, v archíve sa pred ním objaví aj
+súbor `/skola/cecko/PaxHeaders/hw1.c`. Jeho obsah môže vyzerať takto:
+
+[source]
+----
+30 mtime=1615130.826287913\n
+----
+====
+
+[TIP]
+Čas poslednej modifikácie s
+presnosťou na nanosekundy je k dispozícii v položke `st_mtim` (bez e na konci)
+štruktúry `stat`.
+
+Balenie rozširujúcich hlavičiek bude možné aktivovať prepínačom `--pax`.
+Pri rozbaľovaní nebude tento prepínač potrebný. Program bude záznamy
+rozširujúcich hlavičiek spracovávať len ak sú prítomné (typ záznamu `x`).
+Archív nemusí obsahovať rozširujúcu hlavičku pre každý záznam.
+
+[#notes]
+== Poznámky
+
+[NOTE]
+V tejto úlohe môžete používať funkcie POSIX C Library zo štandardu **POSIX.1-2008**.
+Tieto vám môžu uľahčiť implementáciu, ako napríklad
+`https://man.archlinux.org/man/strdup.3[strdup(3)]`.
+
+Keďže táto úloha je mierená na POSIX, ktorý má na operačnom systéme Windows
+slabú podporu, je používateľom tohto operačného systému odporúčané úlohu
+implementovať a testovať v nejakom unixovom prostredí, či už pomocou
+https://www.fi.muni.cz/pb071/man/#wsl[WSL] (odporúčané),
+https://www.fi.muni.cz/pb071/man/#win-workflow-virtualization[virtualizácie],
+alebo na školskom serveri Aisa.
+
+Na serveri Aisa prebiehajú aj testy pri odovzdaní, preto je veľmi dobrý nápad
+si na tomto serveri pred odovzdaním svoju implementáciu otestovať
+(podľa pravidiel predmetu je to aj povinné).
+
+POSIX funkcie používané v tejto úlohe nie sú súčasťou štandardu jazyka C.
+Aby ich bolo možné využívať, je nutné ich pri preklade povoliť. Slúži na to prepínač
+`-D_POSIX_C_SOURCE=200809L`. Svoju implementáciu teda prekladajte takto:
+
+[source]
+----
+gcc -std=c99 -Wall -Wextra -pedantic -D_POSIX_C_SOURCE=200809L ...
+----
+
+[#notes-submit]
+=== Odovzdávané súbory
+
+Riešenie môžete rozdeliť do viacerých súborov s príponami `.c` a `.h` podľa
+vlastného uváženia.
+
+Odovzdávací systém bude ignorovať súbory uložené v adresári `test/`, súbory s
+názvom začínajúcim reťazcom `test` a súbor `cut.h`.
+Tieto môžete použiť na to, aby ste si k riešeniu mohli uložiť svoje vlastné
+testy na jednom mieste.
+
+[#notes-reference]
+=== Referenčná implementácia
+
+Referenčnú implementáciu nájdete na Aise pod cestou
+
+----
+{{page.solution-path}}
+----
+
+Okrem oboch bonusov je doplnená o prepínač `l`, ktorý vedie k vypísaniu
+hlavičiek archívu v človeku čitateľnej podobe.
+
+Príklad použitia:
+
+----
+aisa # /home/kontr/pb071/hw05/tar cv --pax empty_dir.tar empty_dir/
+empty_dir/
+aisa # /home/kontr/pb071/hw05/tar l empty_dir.tar
+PaxHeaders/empty_dir/
+        filename  [0]+:'PaxHeaders/empty_dir/'
+        mode      [100]+:'0000644'
+        owner_id  [108]+:'0000000'
+        group_id  [116]+:'0000000'
+        size      [124]+:'00000000036'
+        mtime     [136]+:'00000000000'
+        checksum  [148]+:'013336'
+        type      [156]+:'x'
+        link      [157]+:''
+        magic     [257]+:'ustar'
+        magic     [263]+:'00'
+        owner     [265]+:''
+        group     [297]+:''
+        major     [329]+:'0000000'
+        minor     [337]+:'0000000'
+        prefix    [345]+:''
+empty_dir/
+        filename  [0]+:'empty_dir/'
+        mode      [100]+:'0000755'
+        owner_id  [108]+:'0052306'
+        group_id  [116]+:'0023564'
+        size      [124]+:'00000000000'
+        mtime     [136]+:'14045721416'
+        checksum  [148]+:'013767'
+        type      [156]+:'5'
+        link      [157]+:''
+        magic     [257]+:'ustar'
+        magic     [263]+:'00'
+        owner     [265]+:'student'
+        group     [297]+:'users'
+        major     [329]+:'0000000'
+        minor     [337]+:'0000000'
+        prefix    [345]+:''
+----
+
+V rovnakom adresári nájdete aj nástroj `tarcat`, pomocou ktorého môžete spojiť
+viac archívov do jedného.
