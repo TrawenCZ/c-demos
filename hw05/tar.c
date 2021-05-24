@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <pwd.h>
 #include <grp.h>
+#include <utime.h>
 
 typedef struct dynamic_list
 {
@@ -16,6 +17,28 @@ typedef struct dynamic_list
     int size;
     int limit_size;
 } dynamic_list;
+
+struct metadata
+{
+    char *path_to_file;
+    int mode;
+    int file_size;
+    int last_accessed;
+    char type_of_file;
+};
+
+int power(int num, int times_to_power)
+{
+    int base = num;
+    if (times_to_power == 0) {
+        return 1;
+    }
+    while (times_to_power > 1) {
+        num *= base;
+        times_to_power--;
+    }
+    return num;
+}
 
 bool is_regular_directory(const char *path)
 {
@@ -48,7 +71,6 @@ bool append(dynamic_list *list, char *prefix, char *element) {
 
     strcat(list->data[list->size], prefix);
     if (strcmp(element, "") != 0) {
-        strcat(list->data[list->size], "/");
         strcat(list->data[list->size], element);
     }
     list->size++;
@@ -60,6 +82,16 @@ bool list_processer(dynamic_list *todo_list, int start_index)
     int current_size_limit = todo_list->size;
     for (int i = start_index; i < current_size_limit; i++) {
         if (is_regular_directory(todo_list->data[i])) {
+
+            if (todo_list->data[i][strlen(todo_list->data[i]) - 1] != '/') {
+                if (strlen(todo_list->data[i]) > 253) {
+                    fprintf(stderr, "Path '%s/' is too large to store!\n", todo_list->data[i]);
+                    continue;
+                } else {
+                    strcat(todo_list->data[i], "/");
+                }
+            }
+
             int new_start_index = todo_list->size;
             DIR *directory = opendir(todo_list->data[i]);
             if (directory == NULL) continue;
@@ -130,15 +162,19 @@ char* to_octal(int num, int size_of_output, bool control_count, char **to_free)
 bool load_info(dynamic_list *list, bool should_print, int output)
 {   
     struct stat path_stat;
+    bool return_value = true;
+    
     for (int i = 0; i < list->size; i++) {
         if (should_print) fprintf(stderr, "%s\n", list->data[i]);
         if (stat(list->data[i], &path_stat) == -1) {
             fprintf(stderr, "Could not access file '%s'\n", list->data[i]);
+            return_value = false;
             continue;
         }
         int file = open(list->data[i], O_RDONLY);
         if (file == -1) {
             fprintf(stderr, "Could not open file '%s'\n", list->data[i]);
+            return_value = false;
             continue;
         }
 
@@ -153,7 +189,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         }
 
         strcpy(&new_header[0], file_name);
-        strcpy(&new_header[100], to_octal(path_stat.st_mode, 8, false, &to_free[0]));
+        strcpy(&new_header[100], to_octal(path_stat.st_mode & 511, 8, false, &to_free[0]));
         strcpy(&new_header[108], to_octal(path_stat.st_uid, 8, false, &to_free[1]));
         strcpy(&new_header[116], to_octal(path_stat.st_gid, 8, false, &to_free[2]));
         strcpy(&new_header[124], to_octal(path_stat.st_size, 12, false, &to_free[3]));
@@ -177,6 +213,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
             control_count += (unsigned int) new_header[i];
         }
         strcpy(&new_header[148], to_octal(control_count, 8, true, &to_free[5]));
+
         new_header[155] = ' ';
 
         write(output, new_header, 512);
@@ -191,6 +228,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         char *buffer = malloc(path_stat.st_size);
         if (buffer == NULL) {
             fprintf(stderr, "Could not allocate enough memory for file '%s' content!\n", list->data[i]);
+            return_value = false;
             continue;
         }
         read(file, buffer, path_stat.st_size);
@@ -201,23 +239,245 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         free(buffer);
         free(empty_space);
     }
-    return true;
+    return return_value;
+}
+
+char* from_prefix(char buffer[512])
+{
+    char *path_to_file = malloc(255);
+    path_to_file[0] = '\0';
+    strcat(path_to_file, &buffer[345]);
+    strcat(path_to_file, &buffer[0]);
+    return path_to_file;
+
+}
+
+unsigned int control_sum(char *buffer)
+{
+    unsigned int sum = 8*32; // size of 8 spaces
+    for (int i = 0; i < 512; i++) {
+        if (i >= 148 && i < 156) continue;
+        sum += (unsigned int) buffer[i];
+    }
+    return sum;
+}
+
+int from_octal(char *input, int limit)
+{
+    int output_val = 0;
+    bool ender_found = false;
+    int space_sizer = 1;
+    int i = 0;
+    int octal_num = 0;
+    for (int i = limit - 1; i >= 0; i--) {
+        if (!ender_found) {
+            if (input[i] == '\0') ender_found = true;
+            continue;
+        }
+        octal_num += (input[i] - 48) * space_sizer; // -48 because of 
+        space_sizer *= 10;
+    }
+
+    while (octal_num != 0)
+    {
+        output_val += (octal_num % 10) * power(8, i++);
+        octal_num /= 10;
+    }
+
+    return output_val;
+}
+
+void check_existence_of_dirs(char *path)
+{
+    char buffer[255];
+    for (int i = 0; i < (int) strlen(path) - 1; i++) {
+        if (path[i] == '/') {
+            buffer[i] = '\0';
+            DIR *check = opendir(buffer);
+            if (check != NULL) {
+                free(check);
+                continue;
+            }
+            mkdir(buffer, 0777);
+        }
+        buffer[i] = path[i];
+    }
+}
+
+struct metadata* extract_metadata(char *buffer)
+{
+    struct metadata *data = malloc(sizeof(struct metadata));
+    data->path_to_file = from_prefix(buffer);
+    data->mode = from_octal(&buffer[100], 8);
+    data->file_size = from_octal(&buffer[124], 12);
+    data->last_accessed = from_octal(&buffer[136], 12);
+    data->type_of_file = buffer[156];
+    return data;
 }
 
 
-int main_failed(dynamic_list *list)
+bool load_files(struct stat input_stats, int input, bool should_print)
+{
+    int byte_counter = 0;
+    char *header_buffer = calloc(sizeof(char), 512);
+    bool return_val = true;
+    while (byte_counter < input_stats.st_size - 1024) {
+        read(input, header_buffer, 512);
+        byte_counter += 512;
+
+        struct metadata *data = extract_metadata(header_buffer);
+        if (should_print) fprintf(stderr, "%s\n", data->path_to_file);
+
+        if (control_sum(header_buffer) != (unsigned int) from_octal(&header_buffer[148], 8)) {
+            fprintf(stderr, "Control sum from one of the headers doesn't match!\n");
+
+            free(header_buffer);
+            free(data->path_to_file);
+            free(data);
+            return false;
+        }
+
+        char *locater;
+        if ((locater = strchr(data->path_to_file, '/')) != NULL && locater != &data->path_to_file[strlen(data->path_to_file) - 1]) {
+            check_existence_of_dirs(data->path_to_file);
+        }
+
+        if (data->type_of_file == '5') {
+            DIR *check = opendir(data->path_to_file);
+            if (check != NULL) {
+                free(data->path_to_file);
+                free(data);
+                free(check);
+                continue;
+            } else {
+                mkdir(data->path_to_file, data->mode);
+            }
+        } else if (data->type_of_file == '0') {
+            int check = open(data->path_to_file, O_RDONLY); 
+            if (check != -1) {
+                fprintf(stderr, "File '%s' already exists!\n", data->path_to_file);
+                return_val = false;
+                int to_seek = data->file_size + (512 - data->file_size % 512);
+                if (data->file_size == 0) {
+                    to_seek = 0;
+                }
+                lseek(input, to_seek, SEEK_CUR);
+                byte_counter += to_seek;
+                free(data->path_to_file);
+                free(data);
+                continue;
+            }
+            creat(data->path_to_file, data->mode);
+        } else {
+            fprintf(stderr, "Unrecognized type of file!\n");
+            free(header_buffer);
+            free(data->path_to_file);
+            free(data);
+            return false;
+        }
+
+        struct utimbuf ubuf;
+        ubuf.modtime = data->last_accessed;
+        ubuf.actime = data->last_accessed;
+        if (data->type_of_file == '0' && utime(data->path_to_file, &ubuf) != 0) {
+            fprintf(stderr, "Could not set last-access time for file '%s'\n", data->path_to_file);
+            free(data->path_to_file);
+            free(data);
+            free(header_buffer);
+            return false;
+        }
+
+        if (data->type_of_file == '0' && data->file_size > 0) {
+            int output_file = open(data->path_to_file, O_WRONLY);
+            char *file_content = malloc(data->file_size);
+            read(input, file_content, data->file_size);
+            write(output_file, file_content, data->file_size);
+            free(file_content);
+            close(output_file);
+            lseek(input, 512 - (data->file_size % 512), SEEK_CUR);
+            byte_counter += data->file_size + (512 - (data->file_size % 512));
+        }
+        
+        free(data->path_to_file);
+        free(data);
+
+    }
+    free(header_buffer);
+    return return_val;
+}
+
+
+int create_failed(dynamic_list *list)
 {
     clear(list);
-    return EXIT_FAILURE;
+    return false;
 }
 
 int cmpstr(void const *pStr1, void const *pStr2) { 
     return strcmp(*(char const **) pStr1, *(char const **) pStr2);
 }
 
+bool create_processer(int argc, char **input_files, bool should_print)
+{
+    dynamic_list *todo_list = malloc(sizeof(dynamic_list));
+    todo_list->size = 0;
+    todo_list->limit_size = 20;
+    todo_list->data = malloc(__SIZEOF_POINTER__ * 20);
+    for (int i = 3; i < argc; i++) {
+        if (!append(todo_list, input_files[i], "")) return create_failed(todo_list);
+    }
+    if (!list_processer(todo_list, 0)) return create_failed(todo_list);
+
+    qsort(todo_list->data, todo_list->size, __SIZEOF_POINTER__, cmpstr);
+
+    /*
+    for (int i = 0; i < todo_list->size; i++) {
+        puts(todo_list->data[i]);
+    }
+    */
+
+    int output = open(input_files[2], O_CREAT | O_WRONLY, 0666);
+    if (output == -1) {
+        fprintf(stderr, "Cannot open given output!\n");
+        return create_failed(todo_list);
+    }
+    if (!load_info(todo_list, should_print, output)) return create_failed(todo_list);
+    char *ender = calloc(sizeof(char), 1024);
+    if (ender == NULL) {
+        fprintf(stderr, "Could not allocate enough memory for ending zero sequence.\n");
+        return create_failed(todo_list);
+    }
+    write(output, ender, 1024);
+    free(ender);
+
+    clear(todo_list);
+    return true;
+}
+
+bool extract_processer(char *path_to_input, bool should_print)
+{
+    int file = open(path_to_input, O_RDONLY);
+    if (file == -1) {
+        fprintf(stderr, "Could not open input tar file for extraction!\n");
+        return false;
+    }
+    struct stat path_stat;
+    if (stat(path_to_input, &path_stat) == -1) {
+        fprintf(stderr, "Could not access metadata of input tar file!\n");
+        return false;
+    } else if (path_stat.st_size % 512 != 0) {
+        fprintf(stderr, "Given tar doesn't have valid size!\n");
+        return false;
+    }
+
+    if (!load_files(path_stat, file, should_print)) return false;
+    return true;
+
+}
+
 int main(int argc, char **argv)
 {
-    if (argc < 4) {
+    if (argc < 3) {
         fprintf(stderr, "Not enough arguments given!\n");
         return EXIT_FAILURE;
     }
@@ -241,37 +501,16 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    dynamic_list *todo_list = malloc(sizeof(dynamic_list));
-    todo_list->size = 0;
-    todo_list->limit_size = 20;
-    todo_list->data = malloc(__SIZEOF_POINTER__ * 20);
-    for (int i = 3; i < argc; i++) {
-        if (!append(todo_list, argv[i], "")) return main_failed(todo_list);
+    if (create) {
+        if (!create_processer(argc, argv, print)) return EXIT_FAILURE;
+    } else if (extract) {
+        if (argc != 3) {
+            fprintf(stderr, "Invalid number of arguments given for extraction! (Given '%d', but should be 3)\n", argc);
+            return EXIT_FAILURE;
+        }
+        if (!extract_processer(argv[2], print)) return EXIT_FAILURE;
     }
-    if (!list_processer(todo_list, 0)) return main_failed(todo_list);
 
-    qsort(todo_list->data, todo_list->size, __SIZEOF_POINTER__, cmpstr);
-
-    /*
-    for (int i = 0; i < todo_list->size; i++) {
-        puts(todo_list->data[i]);
-    }
-    */
-
-    int output = open(argv[2], O_CREAT | O_WRONLY, 0666);
-    if (output == -1) {
-        fprintf(stderr, "Cannot open given output!\n");
-        return main_failed(todo_list);
-    }
-    if (create && !load_info(todo_list, print, output)) return main_failed(todo_list); // argv[2] is output file
-    char *ender = calloc(sizeof(char), 1024);
-    if (ender == NULL) {
-        fprintf(stderr, "Could not allocate enough memory for ending zero sequence.\n");
-        return main_failed(todo_list);
-    }
-    write(output, ender, 1024);
-    free(ender);
-
-    clear(todo_list);
+    
     return EXIT_SUCCESS;
 }
