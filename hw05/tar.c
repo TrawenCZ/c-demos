@@ -11,6 +11,22 @@
 #include <grp.h>
 #include <utime.h>
 
+/*
+                                     _ _ _  __        ___    ____  _   _ ___ _   _  ____   _ _ _ 
+                                    | | | | \ \      / / \  |  _ \| \ | |_ _| \ | |/ ___| | | | |
+                                    | | | |  \ \ /\ / / _ \ | |_) |  \| || ||  \| | |  _  | | | |
+                                    |_|_|_|   \ V  V / ___ \|  _ <| |\  || || |\  | |_| | |_|_|_|
+                                    (_|_|_)    \_/\_/_/   \_\_| \_\_| \_|___|_| \_|\____| (_|_|_)
+ 
+  ____            _                 _                             _                             _        _          _               
+ | __ ) _ __ __ _(_)_ __         __| | __ _ _ __ ___   __ _  __ _(_)_ __   __ _    ___ ___   __| | ___  | |__   ___| | _____      __
+ |  _ \| '__/ _` | | '_ \ _____ / _` |/ _` | '_ ` _ \ / _` |/ _` | | '_ \ / _` |  / __/ _ \ / _` |/ _ \ | '_ \ / _ \ |/ _ \ \ /\ / /
+ | |_) | | | (_| | | | | |_____| (_| | (_| | | | | | | (_| | (_| | | | | | (_| | | (_| (_) | (_| |  __/ | |_) |  __/ | (_) \ V  V / 
+ |____/|_|  \__,_|_|_| |_|      \__,_|\__,_|_| |_| |_|\__,_|\__, |_|_| |_|\__, |  \___\___/ \__,_|\___| |_.__/ \___|_|\___/ \_/\_/  
+                                                            |___/         |___/                                                     
+*/
+
+
 typedef struct dynamic_list
 {
     char **data;
@@ -60,7 +76,9 @@ bool append(dynamic_list *list, char *prefix, char *element) {
         list->data = holder;
     }
 
-    if (strlen(prefix) + strlen(element) + 1 > 254) return true;  // + 1 is for '/' character between prefix and element
+    if (strlen(prefix) + strlen(element) + 1 > 254) {
+        return true; }
+          // + 1 is for '/' character between prefix and element
     
     list->data[list->size] = malloc(sizeof(char)*255);
     list->data[list->size][0] = '\0';
@@ -98,7 +116,7 @@ bool list_processer(dynamic_list *todo_list, int start_index)
             struct dirent *dir_content;
             while ((dir_content = readdir(directory)) != NULL) {
                 if (strcmp(dir_content->d_name, "..") == 0 || strcmp(dir_content->d_name, ".") == 0) continue;
-                if (!append(todo_list, todo_list->data[i], dir_content->d_name)) return false;
+                if (!append(todo_list, todo_list->data[i], dir_content->d_name)) { free(directory); return false; }
             }
             free(directory);
             if (!list_processer(todo_list, new_start_index)) return false;
@@ -115,21 +133,21 @@ void clear(dynamic_list *list) {
     free(list);
 }
 
-void split_to_prefix(char *input, char **prefix, char **file_name)
+void split_to_prefix(char *input, char *prefix, char **file_name)
 {
     int pointer = strlen(input) - 100;
     while (input[pointer] != '/' && input[pointer] == '\0') {
         pointer++;
     }
     if (input[pointer] == '\0') {
-        strncpy(*prefix, input, 155);
-        prefix[pointer - 1] = '\0';
+        strncpy(prefix, input, 155);
+        prefix[pointer+1] = '\0';
         *file_name = "";
         return;
     }
-    strncpy(*prefix, input, 155);
-    prefix[pointer - 1] = '\0';
-    *file_name = input + pointer + 1;
+    strncpy(prefix, input, 155);
+    prefix[pointer+1] = '\0';
+    *file_name += pointer + 2;
 }
 
 char* to_octal(int num, int size_of_output, bool control_count, char **to_free)
@@ -163,17 +181,29 @@ bool load_info(dynamic_list *list, bool should_print, int output)
 {   
     struct stat path_stat;
     bool return_value = true;
+    int file;
     
     for (int i = 0; i < list->size; i++) {
         if (should_print) fprintf(stderr, "%s\n", list->data[i]);
-        if (stat(list->data[i], &path_stat) == -1) {
-            fprintf(stderr, "Could not access file '%s'\n", list->data[i]);
-            return_value = false;
-            continue;
+        
+        if (is_regular_directory(list->data[i])) {
+            DIR *folder_check;
+            if ((folder_check = opendir(list->data[i])) == NULL) {
+                fprintf(stderr, "Permission denied to folder '%s'!\n", list->data[i]);
+                continue;
+            } else {
+                closedir(folder_check);
+                free(folder_check);
+            }
+        } else {
+            if ((file = open(list->data[i], O_RDONLY)) == -1) {
+                fprintf(stderr, "Permission denied to file '%s'!\n", list->data[i]);
+                continue;
+            }
         }
-        int file = open(list->data[i], O_RDONLY);
-        if (file == -1) {
-            fprintf(stderr, "Could not open file '%s'\n", list->data[i]);
+
+        if (stat(list->data[i], &path_stat) == -1) {
+            fprintf(stderr, "Could not access path '%s'\n", list->data[i]);
             return_value = false;
             continue;
         }
@@ -185,7 +215,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         prefix[0] = '\0';
         char *file_name = list->data[i];
         if (strlen(list->data[i]) > 99) {
-            split_to_prefix(list->data[i], &prefix, &file_name);
+            split_to_prefix(list->data[i], prefix, &file_name);
         }
 
         strcpy(&new_header[0], file_name);
@@ -222,8 +252,9 @@ bool load_info(dynamic_list *list, bool should_print, int output)
             free(to_free[i]);
         }
         free(new_header);
-
-        if (is_regular_directory(list->data[i]) || path_stat.st_size == 0) continue;
+        
+        if (is_regular_directory(list->data[i])) continue;
+        if (path_stat.st_size == 0) { close(file); continue; }
 
         char *buffer = malloc(path_stat.st_size);
         if (buffer == NULL) {
@@ -246,7 +277,11 @@ char* from_prefix(char buffer[512])
 {
     char *path_to_file = malloc(255);
     path_to_file[0] = '\0';
-    strcat(path_to_file, &buffer[345]);
+    if (buffer[345] != '\0') {
+        strcat(path_to_file, &buffer[345]);
+        strcat(path_to_file, "/");
+    }
+    
     strcat(path_to_file, &buffer[0]);
     return path_to_file;
 
@@ -407,8 +442,9 @@ bool load_files(struct stat input_stats, int input, bool should_print)
 }
 
 
-int create_failed(dynamic_list *list)
+int create_failed(dynamic_list *list, int file)
 {
+    close(file);
     clear(list);
     return false;
 }
@@ -424,9 +460,9 @@ bool create_processer(int argc, char **input_files, bool should_print)
     todo_list->limit_size = 20;
     todo_list->data = malloc(__SIZEOF_POINTER__ * 20);
     for (int i = 3; i < argc; i++) {
-        if (!append(todo_list, input_files[i], "")) return create_failed(todo_list);
+        if (!append(todo_list, input_files[i], "")) return create_failed(todo_list, -1);
     }
-    if (!list_processer(todo_list, 0)) return create_failed(todo_list);
+    if (!list_processer(todo_list, 0)) return create_failed(todo_list, -1);
 
     qsort(todo_list->data, todo_list->size, __SIZEOF_POINTER__, cmpstr);
 
@@ -436,19 +472,43 @@ bool create_processer(int argc, char **input_files, bool should_print)
     }
     */
 
-    int output = open(input_files[2], O_CREAT | O_WRONLY, 0666);
-    if (output == -1) {
-        fprintf(stderr, "Cannot open given output!\n");
-        return create_failed(todo_list);
+    int check_existence;
+    if ((check_existence = open(input_files[2], O_RDONLY, 0666)) != -1) {
+        fprintf(stderr, "Output file already exists!\n");
+        return create_failed(todo_list, check_existence);
     }
-    if (!load_info(todo_list, should_print, output)) return create_failed(todo_list);
+
+    int output = open(input_files[2], O_CREAT, 0666);
+    if (output == -1) {
+        fprintf(stderr, "Cannot write to given output!\n");
+        return create_failed(todo_list, output);
+    }
+
+    struct stat path_stat;
+    if (!load_info(todo_list, should_print, output)) {
+        if ((check_existence = stat(input_files[2], &path_stat)) != -1 && path_stat.st_size == 0) {
+            fprintf(stderr, "Trying to create empty .tar!\n");
+            remove(input_files[2]);
+            return create_failed(todo_list, -1);
+        }
+        return create_failed(todo_list, output);
+    }
+
+    
+    if (stat(input_files[2], &path_stat) && path_stat.st_size == 0) {
+        fprintf(stderr, "Trying to create empty .tar!\n");
+        remove(input_files[2]);
+        return create_failed(todo_list, output);
+    }
+
     char *ender = calloc(sizeof(char), 1024);
     if (ender == NULL) {
         fprintf(stderr, "Could not allocate enough memory for ending zero sequence.\n");
-        return create_failed(todo_list);
+        return create_failed(todo_list, output);
     }
     write(output, ender, 1024);
     free(ender);
+    close(output);
 
     clear(todo_list);
     return true;
