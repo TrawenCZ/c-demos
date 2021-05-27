@@ -193,7 +193,6 @@ bool load_info(dynamic_list *list, bool should_print, int output)
                 continue;
             } else {
                 closedir(folder_check);
-                free(folder_check);
             }
         } else {
             if ((file = open(list->data[i], O_RDONLY)) == -1) {
@@ -245,8 +244,6 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         strcpy(&new_header[148], to_octal(control_count, 8, true, &to_free[5]));
 
         new_header[155] = ' ';
-
-        write(output, new_header, 512);
 
         for (int i = 0; i < 6; i++) {
             free(to_free[i]);
@@ -478,7 +475,7 @@ bool create_processer(int argc, char **input_files, bool should_print)
         return create_failed(todo_list, check_existence);
     }
 
-    int output = open(input_files[2], O_CREAT, 0666);
+    int output = creat(input_files[2], 0666);
     if (output == -1) {
         fprintf(stderr, "Cannot write to given output!\n");
         return create_failed(todo_list, output);
