@@ -120,7 +120,7 @@ bool list_processer(dynamic_list *todo_list, int start_index)
                 if (strcmp(dir_content->d_name, "..") == 0 || strcmp(dir_content->d_name, ".") == 0) continue;
                 if (!append(todo_list, todo_list->data[i], dir_content->d_name)) { free(directory); return false; }
             }
-            free(directory);
+            closedir(directory);
             if (!list_processer(todo_list, new_start_index)) return false;
         }
     }
@@ -234,8 +234,8 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         new_header[263] = '0'; new_header[264] = '0';
         strcpy(&new_header[265], getpwuid(path_stat.st_uid)->pw_name);
         strcpy(&new_header[297], getgrgid(path_stat.st_gid)->gr_name);
-        new_header[329] = 0;
-        new_header[337] = 0;
+        strcpy(&new_header[329], "0000000");
+        strcpy(&new_header[337], "0000000");
         strcpy(&new_header[345], prefix);
         free(prefix);
 
@@ -260,6 +260,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         char *buffer = malloc(path_stat.st_size);
         if (buffer == NULL) {
             fprintf(stderr, "Could not allocate enough memory for file '%s' content!\n", list->data[i]);
+            close(file);
             return_value = false;
             continue;
         }
@@ -270,6 +271,7 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         write(output, empty_space, 512 - path_stat.st_size % 512);
         free(buffer);
         free(empty_space);
+        close(file);
     }
     return return_value;
 }
@@ -331,7 +333,7 @@ void check_existence_of_dirs(char *path)
             buffer[i] = '\0';
             DIR *check = opendir(buffer);
             if (check != NULL) {
-                free(check);
+                closedir(check);
                 continue;
             }
             mkdir(buffer, 0777);
@@ -383,7 +385,7 @@ bool load_files(struct stat input_stats, int input, bool should_print)
             if (check != NULL) {
                 free(data->path_to_file);
                 free(data);
-                free(check);
+                closedir(check);
                 continue;
             } else {
                 mkdir(data->path_to_file, data->mode);
@@ -401,9 +403,11 @@ bool load_files(struct stat input_stats, int input, bool should_print)
                 byte_counter += to_seek;
                 free(data->path_to_file);
                 free(data);
+                close(check);
                 continue;
             }
-            creat(data->path_to_file, data->mode);
+            int created = creat(data->path_to_file, data->mode);
+            close(created);
         } else {
             fprintf(stderr, "Unrecognized type of file!\n");
             free(header_buffer);
@@ -460,6 +464,7 @@ bool create_processer(int argc, char **input_files, bool should_print)
     todo_list->size = 0;
     todo_list->limit_size = 20;
     todo_list->data = malloc(POINTER_SIZE * 20);
+
     for (int i = 3; i < argc; i++) {
         if (!append(todo_list, input_files[i], "")) return create_failed(todo_list, -1);
     }
@@ -525,13 +530,16 @@ bool extract_processer(char *path_to_input, bool should_print)
     struct stat path_stat;
     if (stat(path_to_input, &path_stat) == -1) {
         fprintf(stderr, "Could not access metadata of input tar file!\n");
+        close(file);
         return false;
     } else if (path_stat.st_size % 512 != 0) {
         fprintf(stderr, "Given tar doesn't have valid size!\n");
+        close(file);
         return false;
     }
 
-    if (!load_files(path_stat, file, should_print)) return false;
+    if (!load_files(path_stat, file, should_print)) { close(file); return false; }
+    close(file);
     return true;
 
 }
@@ -559,7 +567,7 @@ int main(int argc, char **argv)
 
     if (create && extract) {
         fprintf(stderr, "Cannot extract and create at the same time!\n");
-        return EXIT_FAILURE;
+        return EXIT_SUCCESS;
     }
 
     if (create) {
