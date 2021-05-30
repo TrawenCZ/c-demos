@@ -369,7 +369,7 @@ bool load_files(struct stat input_stats, int input, bool should_print)
         byte_counter += 512;
 
         struct metadata *data = extract_metadata(header_buffer);
-        if (should_print) fputs(data->path_to_file, stderr);
+        if (should_print) fprintf(stderr, "%s\n", data->path_to_file);
 
         if (control_sum(header_buffer) != (unsigned int) from_octal(&header_buffer[148], 8)) {
             fprintf(stderr, "Control sum from one of the headers doesn't match!\n");
@@ -421,19 +421,25 @@ bool load_files(struct stat input_stats, int input, bool should_print)
             return false;
         }
 
-        struct utimbuf ubuf = {(time_t) data->last_accessed, (time_t) data->last_accessed };
-        utime(data->path_to_file, &ubuf);
-
         if (data->type_of_file == '0' && data->file_size > 0) {
             int output_file = open(data->path_to_file, O_WRONLY);
             char *file_content = malloc(data->file_size);
+            int spacer = data->file_size % 512;
+            if (spacer == 0) {
+                spacer = 512;
+            }
             read(input, file_content, data->file_size);
             write(output_file, file_content, data->file_size);
             free(file_content);
             close(output_file);
-            lseek(input, 512 - (data->file_size % 512), SEEK_CUR);
-            byte_counter += data->file_size + (512 - (data->file_size % 512));
+            lseek(input, 512 - spacer, SEEK_CUR);
+            byte_counter += data->file_size + (512 - spacer);
         }
+
+        //fprintf(stderr, "Setting time for %s to %d\n", data->path_to_file, data->last_accessed);
+
+        struct utimbuf ubuf = {(time_t) data->last_accessed, (time_t) data->last_accessed };
+        utime(data->path_to_file, &ubuf);
         
         free(data->path_to_file);
         free(data);
@@ -553,19 +559,19 @@ int main(int argc, char **argv)
     for (int i = 0; i < (int) strlen(argv[1]); i++) {
         if (argv[1][i] == 'c') {
             if (create) {
-                fputs("Duplicit 'c' switch!", stderr);
+                fprintf(stderr, "Duplicit 'c' switch!\n");
                 return EXIT_FAILURE;
             }
             create = true;
         } else if (argv[1][i] == 'x') {
             if (extract) {
-                fputs("Duplicit 'x' switch!", stderr);
+                fprintf(stderr, "Duplicit 'x' switch!\n");
                 return EXIT_FAILURE;
             }
             extract = true;
         } else if (argv[1][i] == 'v') {
             if (print) {
-                fputs("Duplicit 'v' switch!", stderr);
+                fprintf(stderr, "Duplicit 'v' switch!\n");
                 return EXIT_FAILURE;
             }
             print = true;
