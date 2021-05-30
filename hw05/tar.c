@@ -437,12 +437,6 @@ bool create_processer(int argc, char **input_files, bool should_print)
 
     qsort(todo_list->data, todo_list->size, POINTER_SIZE, cmpstr);
 
-    /*
-    for (int i = 0; i < todo_list->size; i++) {
-        puts(todo_list->data[i]);
-    }
-    */
-
     int check_existence;
     if ((check_existence = open(input_files[2], O_RDONLY, 0666)) != -1) {
         fprintf(stderr, "Output file already exists!\n");

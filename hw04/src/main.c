@@ -9,6 +9,7 @@
 #define ALLOWED_CHARS "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!-.:?_"
 #define EXIT_SUCCESS 0
 #define EXIT_FAILURE 1
+#define DEFAULT_SIZE 255
 
 typedef struct linked_list_item 
 {
@@ -55,7 +56,7 @@ static void usage(FILE *output, const char *program)
 
 bool buffer_realloc(buffer *buffer_to_realloc)
 {
-    buffer_to_realloc->size_limit += 255;
+    buffer_to_realloc->size_limit += DEFAULT_SIZE;
     char *holder = realloc(buffer_to_realloc->text, sizeof(char)*buffer_to_realloc->size_limit);
     if (holder == NULL) {
         fprintf(stderr, "Could not allocate enough memory for storing .ini file(s) content.\n");
@@ -97,13 +98,17 @@ void ignore_line(FILE *input)
     }
 }
 
+void free_item(linked_list_item *item) {
+    free(item->name);
+    free(item);
+}
+
 void clear(linked_list *list)
 {
     linked_list_item *pNode = list->top;
     while (pNode != NULL) {
         linked_list_item *pNextNode = pNode->next;
-        free(pNode->name);
-        free(pNode);
+        free_item(pNode);
         pNode = pNextNode;
     }
     free(list);
@@ -111,7 +116,7 @@ void clear(linked_list *list)
 
 bool reallocate(linked_list_item *new_item, int *size_limit)
 {
-    *size_limit += 255;
+    *size_limit += DEFAULT_SIZE;
     void *holder = realloc(new_item->name, sizeof(char)*(*size_limit));
     if (holder == NULL) {
         free(new_item->name);
@@ -153,8 +158,7 @@ bool push_to_linked_list(linked_list_item *item, linked_list *list, bool should_
         linked_list_item *pPath = list->top;
         while (pPath != NULL) {
             if (strcmp(pPath->name, item->name) == 0) {
-                free(item->name);
-                free(item);
+                free_item(item);
                 return false;
             }
             pPath = pPath->next;
@@ -185,11 +189,11 @@ bool sectionize(FILE *input, buffer *output, char *prefix, linked_list *sections
 
     linked_list_item *new_section = malloc(sizeof(linked_list_item));
     if (new_section == NULL) return malloc_failed();
-    new_section->name = malloc(sizeof(char)*255);
+    new_section->name = malloc(sizeof(char)*DEFAULT_SIZE);
     if (new_section->name == NULL) {free(new_section); return malloc_failed(); }
 
     int size_counter = 0;
-    int size_limit = 253;
+    int size_limit = DEFAULT_SIZE - 2;
     bool space_found = false;
     char *mmr_msg = "Could not allocate enought memory for one of the sections!";
 
@@ -211,22 +215,19 @@ bool sectionize(FILE *input, buffer *output, char *prefix, linked_list *sections
         }
         if (strchr(ALLOWED_CHARS, loaded) == NULL) {
             fprintf(stderr, "Unallowed characters in section name! Allowed characters: %s\n", ALLOWED_CHARS);
-            free(new_section->name);
-            free(new_section);
+            free_item(new_section);
             return false;
         }
         if (size_counter == size_limit) {
             if (!reallocate(new_section, &size_limit)) {
                 fprintf(stderr, "%s\n", mmr_msg);
-                free(new_section->name);
-                free(new_section);
+                free_item(new_section);
                 return false;
             }
         }
         if (space_found) {
             fprintf(stderr, "Found white space in section name!\n");
-            free(new_section->name);
-            free(new_section);
+            free_item(new_section);
             return false;
         }
         new_section->name[size_counter] = loaded;
@@ -235,15 +236,13 @@ bool sectionize(FILE *input, buffer *output, char *prefix, linked_list *sections
     new_section->name[size_counter] = '\0';
     if (loaded != ']' || size_counter == 0) {
         fprintf(stderr, "%s", err_msg);
-        free(new_section->name);
-        free(new_section);
+        free_item(new_section);
         return false;
     }
     while ((loaded = fgetc(input)) != EOF && loaded != '\n') {
         if (isspace(loaded)) continue;
         fprintf(stderr, "%s", err_msg);
-        free(new_section->name);
-        free(new_section);
+        free_item(new_section);
         return false;
     }
     if (!push_to_linked_list(new_section, sections, true)) {
@@ -259,12 +258,12 @@ bool key_bind(FILE *input, buffer *output, linked_list *keys, char first_char)
 {   
     linked_list_item *new_key = malloc(sizeof(linked_list_item));
     if (new_key == NULL) return malloc_failed();
-    new_key->name = malloc(sizeof(char)*255);
+    new_key->name = malloc(sizeof(char)*DEFAULT_SIZE);
     if (new_key->name == NULL) {free(new_key); return malloc_failed(); }
     new_key->name[0] = first_char;
     bool space_found = false;
     int size_counter = 1;
-    int size_limit = 253;
+    int size_limit = DEFAULT_SIZE - 2;
     char loaded;    
     while ((loaded = fgetc(input)) != '=' && loaded != '\n' && loaded != EOF) {
         if (isspace(loaded)) {
@@ -273,22 +272,19 @@ bool key_bind(FILE *input, buffer *output, linked_list *keys, char first_char)
         }
         if (strchr(ALLOWED_CHARS, loaded) == NULL) {
             fprintf(stderr, "Key characters not in allowed range! Allowed characters: %s\n", ALLOWED_CHARS);
-            free(new_key->name);
-            free(new_key);
+            free_item(new_key);
             return false;
         }
         if (size_counter == size_limit) {
             if (!reallocate(new_key, &size_limit)) {
                 fprintf(stderr, "Could not allocate enough memory for one of the keys.\n");
-                free(new_key->name);
-                free(new_key);
+                free_item(new_key);
                 return false;
             }
         }
         if (space_found) {
             fprintf(stderr, "Detected white space inside of key!\n");
-            free(new_key->name);
-            free(new_key);
+            free_item(new_key);
             return false;
         }
         new_key->name[size_counter] = loaded;
@@ -296,8 +292,7 @@ bool key_bind(FILE *input, buffer *output, linked_list *keys, char first_char)
     }
     if (loaded == '\n' || loaded == EOF) {
         fprintf(stderr, "Key value not specified correctly!\n");
-        free(new_key->name);
-        free(new_key);
+        free_item(new_key);
         return false;
     }
     new_key->name[size_counter] = '\0';
@@ -346,7 +341,7 @@ bool is_include(FILE* input, linked_list_item *new_path, int init_write_index)
     }
     new_path->name[init_write_index] = loaded;
     int size_counter = 1;
-    int size_limit = 254;
+    int size_limit = DEFAULT_SIZE - 1;
     while ((loaded = fgetc(input)) != '\n' && loaded != EOF) {
         size_counter++;
         init_write_index++;
@@ -381,12 +376,10 @@ void pop_from_linked_list(linked_list *list)
     linked_list_item *pNewBottom = list->bottom->prev;
     if (pNewBottom == NULL) {
         list->top = NULL;
-        free(list->bottom->name);
-        free(list->bottom);
+        free_item(list->bottom);
         list->bottom = NULL;
     } else {
-        free(pNewBottom->next->name);
-        free(pNewBottom->next);
+        free_item(pNewBottom->next);
         pNewBottom->next = NULL;
         list->bottom = pNewBottom;
     }
@@ -399,9 +392,9 @@ bool to_prefix_rec(char *path, int index, linked_list *prefixed_path, int depth_
     int dot_count = 0;
     linked_list_item *prefixed_path_item = malloc(sizeof(linked_list_item));
     if (prefixed_path_item == NULL) return malloc_failed();
-    int size_limit = 253;
+    int size_limit = DEFAULT_SIZE - 2;
     int size_counter = 0;
-    prefixed_path_item->name = malloc(sizeof(char)*255);
+    prefixed_path_item->name = malloc(sizeof(char)*DEFAULT_SIZE);
     if (prefixed_path_item == NULL) {free(prefixed_path_item); return malloc_failed(); }
 
     while (path[index] != '/' && path[index] != '\\' && path[index] != '\0') {
@@ -429,15 +422,13 @@ bool to_prefix_rec(char *path, int index, linked_list *prefixed_path, int depth_
 
     if (only_dot && dot_count == 2) {
         pop_from_linked_list(prefixed_path);
-        free(prefixed_path_item->name);
-        free(prefixed_path_item);
+        free_item(prefixed_path_item);
         if (prefixed_path->size < depth_limit && should_control) {
             fprintf(stderr, "Detected step above root directory! (Root directory is where input file is.)\n");   
             return false;
         } 
     } else if (only_dot && dot_count == 1) {
-        free(prefixed_path_item->name);
-        free(prefixed_path_item);
+        free_item(prefixed_path_item);
     } else {
         prefixed_path_item->name[size_counter] = ':';
         prefixed_path_item->name[size_counter + 1] = '\0';
@@ -459,7 +450,7 @@ bool to_prefix_rec(char *path, int index, linked_list *prefixed_path, int depth_
 bool to_prefix(char* path, linked_list_item *new_prefix, int *new_size, int depth_limit, bool should_control)
 {
     linked_list *prefixed_path = malloc(sizeof(linked_list));
-    int size_limit = 254;
+    int size_limit = DEFAULT_SIZE - 1;
     int size_counter = 0;
     prefixed_path->size = 0;
     prefixed_path->top = NULL;
@@ -493,41 +484,36 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
 {
     linked_list_item *new_path = malloc(sizeof(linked_list_item));
     if (new_path == NULL) return malloc_failed();
-    new_path->name = malloc(sizeof(char)*255 + sizeof(char)*strlen(path_prefix->name));
+    new_path->name = malloc(sizeof(char)*DEFAULT_SIZE + sizeof(char)*strlen(path_prefix->name));
     if (new_path->name == NULL) {free(new_path); return malloc_failed(); }
     strcpy(new_path->name, path_prefix->name);
 
     if (!is_include(input, new_path, strlen(path_prefix->name))) {
         fprintf(stderr, "Invalid .include statement in file.\n");
-        free(new_path->name);
-        free(new_path);
+        free_item(new_path);
         return false;
     }
 
     if (!is_valid_path(new_path)) {
-        free(new_path->name);
-        free(new_path);
+        free_item(new_path);
         return false;
     }
 
     FILE* new_input = fopen(new_path->name, "r");
     if (new_input == NULL) {
         fprintf(stderr, "Cannot open file at path after '.include' statement in file.\n");
-        free(new_path->name);
-        free(new_path);
+        free_item(new_path);
         return false;
     }
 
     linked_list_item *new_prefix = malloc(sizeof(linked_list_item));
     if (new_prefix == NULL) return malloc_failed();
-    new_prefix->name = malloc(sizeof(char)*255);
+    new_prefix->name = malloc(sizeof(char)*DEFAULT_SIZE);
     if (new_prefix->name == NULL) {free(new_prefix); return malloc_failed(); }
     
     if (!to_prefix(new_path->name, new_prefix, NULL, depth_limit, true)) {
-        free(new_path->name);
-        free(new_path);
-        free(new_prefix->name);
-        free(new_prefix);
+        free_item(new_path);
+        free_item(new_prefix);
         fclose(new_input);
         return false;
     } else {
@@ -535,25 +521,22 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
     }
 
     linked_list_item *new_path_prefix = malloc(sizeof(linked_list_item));
-    if (new_path_prefix == NULL) { free(new_path->name); free(new_path); return malloc_failed();}
-    new_path_prefix->name = malloc(sizeof(char)*255);
-    if (new_path_prefix->name == NULL) { free(new_path->name); free(new_path); free(new_path_prefix); return malloc_failed();}
-    path_creator(new_path->name, new_path_prefix, 254);
+    if (new_path_prefix == NULL) { free_item(new_path); return malloc_failed();}
+    new_path_prefix->name = malloc(sizeof(char)*DEFAULT_SIZE);
+    if (new_path_prefix->name == NULL) { free_item(new_path); free(new_path_prefix); return malloc_failed();}
+    path_creator(new_path->name, new_path_prefix, DEFAULT_SIZE - 1);
 
-    free(new_path->name);
-    free(new_path);
+    free_item(new_path);
 
     if (!push_to_linked_list(new_prefix, used_files, (guard || report_cycles))) {
         if (guard) {
             fclose(new_input);
-            free(new_path_prefix->name);
-            free(new_path_prefix);
+            free_item(new_path_prefix);
             return true;
         } else if (report_cycles) {
             fprintf(stderr, "Cycle in .include statements detected!\n");
             fclose(new_input);
-            free(new_path_prefix->name);
-            free(new_path_prefix);
+            free_item(new_path_prefix);
             return false;
         }
     }
@@ -561,15 +544,13 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
     if (used_files->size > max_depth) {
             fprintf(stderr, "Max depth exceeded! Try setting it higher for bigger tolerance.\n");
             fclose(new_input);
-            free(new_path_prefix->name);
-            free(new_path_prefix);
+            free_item(new_path_prefix);
             return false;
         }
     
     if (!convert(new_input, output, guard, report_cycles, with_comments, max_depth, new_path_prefix, depth_limit, new_prefix->name, sections, used_files)) {
         fclose(new_input);
-        free(new_path_prefix->name);
-        free(new_path_prefix);
+        free_item(new_path_prefix);
         return false;
     }
     if (!guard) {
@@ -577,8 +558,7 @@ bool include_processer(FILE *input, buffer *output, bool guard, bool report_cycl
     } else {
         used_files->size--;
     }
-    free(new_path_prefix->name);
-    free(new_path_prefix);
+    free_item(new_path_prefix);
     fclose(new_input);
     return true;
 }
@@ -731,7 +711,7 @@ int main(int argc, char **argv)
     sections->top = NULL;
 
     linked_list_item *new_prefix = malloc(sizeof(linked_list_item));
-    new_prefix->name = malloc(sizeof(char)*255);
+    new_prefix->name = malloc(sizeof(char)*DEFAULT_SIZE);
     if (new_prefix == NULL || new_prefix->name == NULL) {
         fprintf(stderr, "Could not allocate enough memory for file prefix.\n");
         free(used_files);
@@ -747,14 +727,14 @@ int main(int argc, char **argv)
     *new_size = *new_size - 1;
 
     linked_list_item *new_path = malloc(sizeof(linked_list_item));
-    new_path->name = malloc(sizeof(char)*255);
-    path_creator(argv[i-1], new_path, 254);
+    new_path->name = malloc(sizeof(char)*DEFAULT_SIZE);
+    path_creator(argv[i-1], new_path, DEFAULT_SIZE - 1);
 
 
     buffer *tmp_output = malloc(sizeof(buffer));
-    tmp_output->text = malloc(sizeof(char)*255);
+    tmp_output->text = malloc(sizeof(char)*DEFAULT_SIZE);
     tmp_output->size = 0;
-    tmp_output->size_limit = 254;
+    tmp_output->size_limit = DEFAULT_SIZE - 1;
 
 
     int return_val = EXIT_FAILURE;
@@ -772,8 +752,7 @@ int main(int argc, char **argv)
 
     free(tmp_output->text);
     free(tmp_output);
-    free(new_path->name);
-    free(new_path);
+    free_item(new_path);
     free(new_size);
     clear(used_files);
     clear(sections);
