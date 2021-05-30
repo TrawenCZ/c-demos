@@ -26,6 +26,8 @@
                                                             |___/         |___/                                                     
 */
 
+#define POINTER_SIZE 8
+
 
 typedef struct dynamic_list
 {
@@ -43,7 +45,7 @@ struct metadata
     char type_of_file;
 };
 
-int power(int num, int times_to_power)
+int power(int num, int times_to_power)  // somehow pow() from math.h didn't work so I made myself a new one
 {
     int base = num;
     if (times_to_power == 0) {
@@ -68,7 +70,7 @@ bool append(dynamic_list *list, char *prefix, char *element) {
 
     if (list->size + 1 > list->limit_size) {
         list->limit_size += 20;
-        char **holder = realloc(list->data, __SIZEOF_POINTER__ * list->limit_size);
+        char **holder = realloc(list->data, POINTER_SIZE * list->limit_size);
         if (holder == NULL) {
             fprintf(stderr, "%s", err_msg);
             return false;
@@ -457,13 +459,13 @@ bool create_processer(int argc, char **input_files, bool should_print)
     dynamic_list *todo_list = malloc(sizeof(dynamic_list));
     todo_list->size = 0;
     todo_list->limit_size = 20;
-    todo_list->data = malloc(__SIZEOF_POINTER__ * 20);
+    todo_list->data = malloc(POINTER_SIZE * 20);
     for (int i = 3; i < argc; i++) {
         if (!append(todo_list, input_files[i], "")) return create_failed(todo_list, -1);
     }
     if (!list_processer(todo_list, 0)) return create_failed(todo_list, -1);
 
-    qsort(todo_list->data, todo_list->size, __SIZEOF_POINTER__, cmpstr);
+    qsort(todo_list->data, todo_list->size, POINTER_SIZE, cmpstr);
 
     /*
     for (int i = 0; i < todo_list->size; i++) {
