@@ -186,25 +186,33 @@ bool load_info(dynamic_list *list, bool should_print, int output)
     int file;
     
     for (int i = 0; i < list->size; i++) {
-        if (should_print) fprintf(stderr, "%s\n", list->data[i]);
+        if (should_print) {
+            if (is_regular_directory(list->data[i])) {
+                char no_slash[255];
+                strcpy(no_slash, list->data[i]);
+                no_slash[strlen(no_slash) - 1] = '\0';
+                fprintf(stderr, "%s\n", no_slash);
+            } else fprintf(stderr, "%s\n", list->data[i]);
+        }
         
         if (is_regular_directory(list->data[i])) {
             DIR *folder_check;
             if ((folder_check = opendir(list->data[i])) == NULL) {
                 fprintf(stderr, "Permission denied to folder '%s'!\n", list->data[i]);
-                continue;
+                return_value = false;
             } else {
                 closedir(folder_check);
             }
         } else {
             if ((file = open(list->data[i], O_RDONLY)) == -1) {
                 fprintf(stderr, "Permission denied to file '%s'!\n", list->data[i]);
+                return_value = false;
                 continue;
             }
         }
 
         if (stat(list->data[i], &path_stat) == -1) {
-            fprintf(stderr, "Could not access path '%s'\n", list->data[i]);
+            fprintf(stderr, "Could not access info about path '%s'\n", list->data[i]);
             return_value = false;
             continue;
         }
@@ -224,6 +232,9 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         strcpy(&new_header[108], to_octal(path_stat.st_uid, 8, false, &to_free[1]));
         strcpy(&new_header[116], to_octal(path_stat.st_gid, 8, false, &to_free[2]));
         strcpy(&new_header[124], to_octal(path_stat.st_size, 12, false, &to_free[3]));
+        if (is_regular_directory(list->data[i])) {
+            strcpy(&new_header[124], "00000000000");
+        }
         strcpy(&new_header[136], to_octal(path_stat.st_mtim.tv_sec, 12, false, &to_free[4]));
         for (int i = 148; i < 156; i++) {
             new_header[i] = ' ';
@@ -255,22 +266,16 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         free(new_header);
         
         if (is_regular_directory(list->data[i])) continue;
-        if (path_stat.st_size == 0) { close(file); continue; }
 
-        char *buffer = malloc(path_stat.st_size);
-        if (buffer == NULL) {
-            fprintf(stderr, "Could not allocate enough memory for file '%s' content!\n", list->data[i]);
-            close(file);
-            return_value = false;
-            continue;
+        char *buffer;
+        int size = path_stat.st_size;
+        while (size > 0) {
+            buffer = calloc(1, 512);
+            read(file, buffer, 512);
+            write(output, buffer, 512);
+            free(buffer);
+            size -= 512;
         }
-        read(file, buffer, path_stat.st_size);
-        write(output, buffer, path_stat.st_size);
-
-        char *empty_space = calloc(sizeof(char), 512 - path_stat.st_size % 512);
-        write(output, empty_space, 512 - path_stat.st_size % 512);
-        free(buffer);
-        free(empty_space);
         close(file);
     }
     return return_value;
@@ -490,6 +495,7 @@ bool create_processer(int argc, char **input_files, bool should_print)
         return create_failed(todo_list, output);
     }
 
+    bool return_val = true;
     struct stat path_stat;
     if (!load_info(todo_list, should_print, output)) {
         if ((check_existence = stat(input_files[2], &path_stat)) != -1 && path_stat.st_size == 0) {
@@ -497,7 +503,7 @@ bool create_processer(int argc, char **input_files, bool should_print)
             remove(input_files[2]);
             return create_failed(todo_list, -1);
         }
-        return create_failed(todo_list, output);
+        return_val = false;
     }
 
     
@@ -517,7 +523,7 @@ bool create_processer(int argc, char **input_files, bool should_print)
     close(output);
 
     clear(todo_list);
-    return true;
+    return return_val;
 }
 
 bool extract_processer(char *path_to_input, bool should_print)
