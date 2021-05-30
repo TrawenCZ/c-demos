@@ -245,6 +245,8 @@ bool load_info(dynamic_list *list, bool should_print, int output)
 
         new_header[155] = ' ';
 
+        write(output, new_header, 512);
+
         for (int i = 0; i < 6; i++) {
             free(to_free[i]);
         }
