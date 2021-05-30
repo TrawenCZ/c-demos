@@ -414,7 +414,7 @@ bool load_files(struct stat input_stats, int input, bool should_print)
 
 int create_failed(dynamic_list *list, int file)
 {
-    close(file);
+    if (file != -1) close(file);
     clear(list);
     return false;
 }
@@ -460,6 +460,7 @@ bool create_processer(int argc, char **input_files, bool should_print)
     if (!load_info(todo_list, should_print, output)) {
         if ((check_existence = stat(input_files[2], &path_stat)) != -1 && path_stat.st_size == 0) {
             fprintf(stderr, "Trying to create empty .tar!\n");
+            close(output);
             remove(input_files[2]);
             return create_failed(todo_list, -1);
         }
