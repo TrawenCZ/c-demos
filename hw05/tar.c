@@ -369,7 +369,7 @@ bool load_files(struct stat input_stats, int input, bool should_print)
         byte_counter += 512;
 
         struct metadata *data = extract_metadata(header_buffer);
-        if (should_print) fprintf(stderr, "%s\n", data->path_to_file);
+        if (should_print) fputs(data->path_to_file, stderr);
 
         if (control_sum(header_buffer) != (unsigned int) from_octal(&header_buffer[148], 8)) {
             fprintf(stderr, "Control sum from one of the headers doesn't match!\n");
@@ -421,16 +421,8 @@ bool load_files(struct stat input_stats, int input, bool should_print)
             return false;
         }
 
-        struct utimbuf ubuf;
-        ubuf.modtime = data->last_accessed;
-        ubuf.actime = data->last_accessed;
-        if (data->type_of_file == '0' && utime(data->path_to_file, &ubuf) != 0) {
-            fprintf(stderr, "Could not set last-access time for file '%s'\n", data->path_to_file);
-            free(data->path_to_file);
-            free(data);
-            free(header_buffer);
-            return false;
-        }
+        struct utimbuf ubuf = {(time_t) data->last_accessed, (time_t) data->last_accessed };
+        utime(data->path_to_file, &ubuf);
 
         if (data->type_of_file == '0' && data->file_size > 0) {
             int output_file = open(data->path_to_file, O_WRONLY);
@@ -560,10 +552,22 @@ int main(int argc, char **argv)
     bool create = false, extract = false, print = false;
     for (int i = 0; i < (int) strlen(argv[1]); i++) {
         if (argv[1][i] == 'c') {
+            if (create) {
+                fputs("Duplicit 'c' switch!", stderr);
+                return EXIT_FAILURE;
+            }
             create = true;
         } else if (argv[1][i] == 'x') {
+            if (extract) {
+                fputs("Duplicit 'x' switch!", stderr);
+                return EXIT_FAILURE;
+            }
             extract = true;
         } else if (argv[1][i] == 'v') {
+            if (print) {
+                fputs("Duplicit 'v' switch!", stderr);
+                return EXIT_FAILURE;
+            }
             print = true;
         } else {
             fprintf(stderr, "Unallowed switches! Allowed: c, x, v\n");
@@ -573,7 +577,7 @@ int main(int argc, char **argv)
 
     if (create && extract) {
         fprintf(stderr, "Cannot extract and create at the same time!\n");
-        return EXIT_SUCCESS;
+        return EXIT_FAILURE;
     }
 
     if (create) {
@@ -586,6 +590,5 @@ int main(int argc, char **argv)
         if (!extract_processer(argv[2], print)) return EXIT_FAILURE;
     }
 
-    
     return EXIT_SUCCESS;
 }
