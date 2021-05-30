@@ -45,19 +45,6 @@ struct metadata
     char type_of_file;
 };
 
-int power(int num, int times_to_power)  // somehow pow() from math.h didn't work so I made myself a new one
-{
-    int base = num;
-    if (times_to_power == 0) {
-        return 1;
-    }
-    while (times_to_power > 1) {
-        num *= base;
-        times_to_power--;
-    }
-    return num;
-}
-
 bool is_regular_directory(const char *path)
 {
     struct stat path_stat;
@@ -305,31 +292,6 @@ unsigned int control_sum(char *buffer)
     return sum;
 }
 
-int from_octal(char *input, int limit)
-{
-    int output_val = 0;
-    bool ender_found = false;
-    int space_sizer = 1;
-    int i = 0;
-    int octal_num = 0;
-    for (int i = limit - 1; i >= 0; i--) {
-        if (!ender_found) {
-            if (input[i] == '\0') ender_found = true;
-            continue;
-        }
-        octal_num += (input[i] - 48) * space_sizer; // -48 because of 
-        space_sizer *= 10;
-    }
-
-    while (octal_num != 0)
-    {
-        output_val += (octal_num % 10) * power(8, i++);
-        octal_num /= 10;
-    }
-
-    return output_val;
-}
-
 void check_existence_of_dirs(char *path)
 {
     char buffer[255];
@@ -351,9 +313,9 @@ struct metadata* extract_metadata(char *buffer)
 {
     struct metadata *data = malloc(sizeof(struct metadata));
     data->path_to_file = from_prefix(buffer);
-    data->mode = from_octal(&buffer[100], 8);
-    data->file_size = from_octal(&buffer[124], 12);
-    data->last_accessed = from_octal(&buffer[136], 12);
+    data->mode = (int) strtoll(&buffer[100], NULL, 8);
+    data->file_size = (int) strtoll(&buffer[124], NULL, 8);
+    data->last_accessed = (int) strtoll(&buffer[136], NULL, 8);
     data->type_of_file = buffer[156];
     return data;
 }
@@ -371,7 +333,7 @@ bool load_files(struct stat input_stats, int input, bool should_print)
         struct metadata *data = extract_metadata(header_buffer);
         if (should_print) fprintf(stderr, "%s\n", data->path_to_file);
 
-        if (control_sum(header_buffer) != (unsigned int) from_octal(&header_buffer[148], 8)) {
+        if (control_sum(header_buffer) != (unsigned int) strtoll(&header_buffer[148], NULL, 8)) {
             fprintf(stderr, "Control sum from one of the headers doesn't match!\n");
 
             free(header_buffer);
