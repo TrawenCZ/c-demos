@@ -125,7 +125,7 @@ void clear(dynamic_list *list) {
 void split_to_prefix(char *input, char *prefix, char **file_name)
 {
     int pointer = strlen(input) - 100;
-    while (input[pointer] != '/' && input[pointer] == '\0') {
+    while (input[pointer] != '/' && input[pointer] != '\0') {
         pointer++;
     }
     if (input[pointer] == '\0') {
@@ -135,8 +135,8 @@ void split_to_prefix(char *input, char *prefix, char **file_name)
         return;
     }
     strncpy(prefix, input, 155);
-    prefix[pointer+1] = '\0';
-    *file_name += pointer + 2;
+    prefix[pointer] = '\0';
+    *file_name += pointer + 1;
 }
 
 char* to_octal(int num, int size_of_output, bool control_count, char **to_free)
@@ -190,12 +190,14 @@ bool load_info(dynamic_list *list, bool should_print, int output)
             } else {
                 closedir(folder_check);
             }
-        } else {
+        } else if (stat(list->data[i], &path_stat) != -1 && S_ISREG(path_stat.st_mode)) {
             if ((file = open(list->data[i], O_RDONLY)) == -1) {
                 fprintf(stderr, "Permission denied to file '%s'!\n", list->data[i]);
                 return_value = false;
                 continue;
             }
+        } else {
+            continue;
         }
 
         if (stat(list->data[i], &path_stat) == -1) {
@@ -230,8 +232,15 @@ bool load_info(dynamic_list *list, bool should_print, int output)
         else new_header[156] = '0';
         strcpy(&new_header[257], "ustar");
         new_header[263] = '0'; new_header[264] = '0';
-        strcpy(&new_header[265], getpwuid(path_stat.st_uid)->pw_name);
-        strcpy(&new_header[297], getgrgid(path_stat.st_gid)->gr_name);
+        
+        struct passwd *user_id;
+        struct group *group_id;
+        if ((user_id = getpwuid(path_stat.st_uid)) != NULL) {
+            strcpy(&new_header[265], user_id->pw_name);
+        }
+        if ((group_id = getgrgid(path_stat.st_gid)) != NULL) {
+            strcpy(&new_header[297], group_id->gr_name);
+        }
         strcpy(&new_header[329], "0000000");
         strcpy(&new_header[337], "0000000");
         strcpy(&new_header[345], prefix);
@@ -333,6 +342,19 @@ bool load_files(struct stat input_stats, int input, bool should_print)
         struct metadata *data = extract_metadata(header_buffer);
         if (should_print) fprintf(stderr, "%s\n", data->path_to_file);
 
+        if (header_buffer[154] != '\0' || header_buffer[155] != ' ') {
+            fprintf(stderr, "Control sum part not in correct format!\n");
+            free(header_buffer); free(data->path_to_file); free(data);
+            return false;
+        }
+        for (int i = 148; i < 154; i++) {
+            if (header_buffer[i] > '9' || header_buffer[i] < '0') {
+                fprintf(stderr, "Control sum part not in correct format!\n");
+                free(header_buffer); free(data->path_to_file); free(data);
+                return false; 
+            }
+        }
+
         if (control_sum(header_buffer) != (unsigned int) strtoll(&header_buffer[148], NULL, 8)) {
             fprintf(stderr, "Control sum from one of the headers doesn't match!\n");
 
@@ -341,6 +363,8 @@ bool load_files(struct stat input_stats, int input, bool should_print)
             free(data);
             return false;
         }
+
+        if (data->type_of_file != '5' && data->type_of_file != '0') continue;
 
         char *locater;
         if ((locater = strchr(data->path_to_file, '/')) != NULL && locater != &data->path_to_file[strlen(data->path_to_file) - 1]) {
@@ -355,7 +379,11 @@ bool load_files(struct stat input_stats, int input, bool should_print)
                 closedir(check);
                 continue;
             } else {
-                mkdir(data->path_to_file, data->mode);
+                if (mkdir(data->path_to_file, data->mode) == -1) {
+                    fprintf(stderr, "Cannot write to given output '%s'\n", data->path_to_file);
+                    return_val = false;
+                    continue;
+                }
             }
         } else if (data->type_of_file == '0') {
             int check = open(data->path_to_file, O_RDONLY); 
@@ -365,6 +393,8 @@ bool load_files(struct stat input_stats, int input, bool should_print)
                 int to_seek = data->file_size + (512 - data->file_size % 512);
                 if (data->file_size == 0) {
                     to_seek = 0;
+                } else if (data->file_size % 512 == 0) {
+                    to_seek = data->file_size;
                 }
                 lseek(input, to_seek, SEEK_CUR);
                 byte_counter += to_seek;
@@ -374,6 +404,11 @@ bool load_files(struct stat input_stats, int input, bool should_print)
                 continue;
             }
             int created = creat(data->path_to_file, data->mode);
+            if (created == -1) {
+                fprintf(stderr, "Cannot write to output '%s'\n", data->path_to_file);
+                return_val = false;
+                continue;
+            }
             close(created);
         } else {
             fprintf(stderr, "Unrecognized type of file!\n");
