@@ -197,6 +197,8 @@ bool load_info(dynamic_list *list, bool should_print, int output)
                 continue;
             }
         } else {
+            fprintf(stderr, "Unrecognized type of file or file doesn't exist!\n");
+            return_value = false;
             continue;
         }
 
@@ -412,10 +414,8 @@ bool load_files(struct stat input_stats, int input, bool should_print)
             close(created);
         } else {
             fprintf(stderr, "Unrecognized type of file!\n");
-            free(header_buffer);
-            free(data->path_to_file);
-            free(data);
-            return false;
+            return_val = false;
+            continue;
         }
 
         if (data->type_of_file == '0' && data->file_size > 0) {
