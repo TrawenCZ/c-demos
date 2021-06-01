@@ -318,7 +318,7 @@ bool check_existence_of_dirs(char *path)
         }
         buffer[i] = path[i];
     }
-    return true
+    return true;
 }
 
 struct metadata* extract_metadata(char *buffer)
