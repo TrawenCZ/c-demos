@@ -303,7 +303,7 @@ unsigned int control_sum(char *buffer)
     return sum;
 }
 
-void check_existence_of_dirs(char *path)
+bool check_existence_of_dirs(char *path)
 {
     char buffer[255];
     for (int i = 0; i < (int) strlen(path) - 1; i++) {
@@ -314,10 +314,11 @@ void check_existence_of_dirs(char *path)
                 closedir(check);
                 continue;
             }
-            mkdir(buffer, 0777);
+            if (mkdir(buffer, 0777) == -1) return false;
         }
         buffer[i] = path[i];
     }
+    return true
 }
 
 struct metadata* extract_metadata(char *buffer)
@@ -370,7 +371,11 @@ bool load_files(struct stat input_stats, int input, bool should_print)
 
         char *locater;
         if ((locater = strchr(data->path_to_file, '/')) != NULL && locater != &data->path_to_file[strlen(data->path_to_file) - 1]) {
-            check_existence_of_dirs(data->path_to_file);
+            if (!check_existence_of_dirs(data->path_to_file)) {
+                fprintf(stderr, "Cannot write to given path '%s'\n", data->path_to_file);
+                return_val = false;
+                continue;
+            }
         }
 
         if (data->type_of_file == '5') {
